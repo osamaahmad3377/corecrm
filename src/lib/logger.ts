@@ -2,7 +2,10 @@
 
 type Level = "debug" | "info" | "warn" | "error";
 
+const QUIET = process.env.VITEST === "true" || process.env.NODE_ENV === "test";
+
 function log(level: Level, msg: string, meta?: Record<string, unknown>) {
+  if (QUIET && level !== "error") return;
   const entry = {
     t: new Date().toISOString(),
     level,

@@ -23,6 +23,7 @@ import {
   StatusControl,
   ClientTicketActions,
 } from "./ticket-controls";
+import { EmailClientDialog } from "./email-client-dialog";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { FileText, Download } from "lucide-react";
 import { formatBytes } from "@/lib/format";
@@ -39,12 +40,19 @@ export async function TicketDetail({
   const ticket = await getTicketForContext(ctx, ticketId);
   const isAdmin = mode === "admin";
 
-  const [statuses, priorities, agents, teams] = await Promise.all([
+  const [statuses, priorities, agents, teams, emailAccounts] = await Promise.all([
     getStatuses(),
     getPriorities(),
     isAdmin && can(ctx, "ticket.assign") ? assignableAgents() : Promise.resolve([]),
     isAdmin && can(ctx, "ticket.assign")
       ? prisma.team.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } })
+      : Promise.resolve([]),
+    isAdmin && can(ctx, "email.send")
+      ? prisma.emailAccount.findMany({
+          where: { status: "CONNECTED", isActive: true },
+          select: { id: true, address: true, displayName: true },
+          orderBy: { displayName: "asc" },
+        })
       : Promise.resolve([]),
   ]);
 
@@ -231,6 +239,16 @@ export async function TicketDetail({
                 )}
               </CardContent>
             </Card>
+          )}
+
+          {isAdmin && emailAccounts.length > 0 && (
+            <EmailClientDialog
+              ticketId={ticket.id}
+              ticketNumber={ticket.ticketNumber}
+              toEmail={ticket.requester.email}
+              subject={ticket.subject}
+              accounts={emailAccounts}
+            />
           )}
 
           {ticket.assignedAgent && (

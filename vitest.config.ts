@@ -5,8 +5,13 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
+      "server-only": fileURLToPath(
+        new URL("./tests/stubs/server-only.ts", import.meta.url),
+      ),
     },
   },
+  // Tests never render CSS; skip PostCSS/Tailwind entirely.
+  css: { postcss: { plugins: [] } },
   test: {
     environment: "node",
     globals: true,
