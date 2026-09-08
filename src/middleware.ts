@@ -30,7 +30,7 @@ export default auth((req) => {
     return NextResponse.redirect(url);
   }
 
-  if (isLoggedIn && (path === "/login" || path === "/")) {
+  if (isLoggedIn && (isAuthPage || path === "/")) {
     return NextResponse.redirect(
       new URL(user?.isInternal ? "/admin" : "/portal", nextUrl),
     );

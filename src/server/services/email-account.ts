@@ -2,7 +2,7 @@ import "server-only";
 import type { EmailAccount, EmailProviderKind, Prisma } from "@prisma/client";
 import { prisma } from "@/server/db/client";
 import { AuthContext } from "@/server/auth/rbac";
-import { AppError, conflict, notFound } from "@/lib/errors";
+import { AppError, notFound } from "@/lib/errors";
 import { decrypt, encrypt, randomToken, sha256 } from "@/lib/crypto";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";

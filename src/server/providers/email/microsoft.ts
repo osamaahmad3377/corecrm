@@ -10,7 +10,6 @@ import type {
   ProviderTokens,
   Subscription,
   SyncOptions,
-  SyncResult,
 } from "./types";
 
 const AUTH = "https://login.microsoftonline.com";

@@ -88,10 +88,28 @@ export async function inviteClientUserAction(
   });
 }
 
+async function authorizeInvitationManagement(invitationId: string) {
+  const ctx = await requireAuth();
+  const { prisma } = await import("@/server/db/client");
+  const inv = await prisma.invitation.findUnique({
+    where: { id: invitationId },
+    select: { organizationId: true },
+  });
+  if (!inv) return ctx;
+  if (ctx.isInternal) {
+    await requireInternal("SUPPORT_MANAGER");
+  } else if (inv.organizationId) {
+    await requireOrgAccess(inv.organizationId, { write: true });
+  } else {
+    await requireInternal("SUPPORT_MANAGER");
+  }
+  return ctx;
+}
+
 export async function resendInvitationAction(
   invitationId: string,
 ): Promise<ActionState> {
-  const ctx = await requireInternal("SUPPORT_MANAGER");
+  const ctx = await authorizeInvitationManagement(invitationId);
   return runAction(async () => {
     const { acceptUrl } = await resendInvitation(invitationId, ctx.userId);
     return { message: `Invitation resent. Link: ${acceptUrl}` };
@@ -101,10 +119,10 @@ export async function resendInvitationAction(
 export async function revokeInvitationAction(
   invitationId: string,
 ): Promise<ActionState> {
-  const ctx = await requireInternal("SUPPORT_MANAGER");
+  const ctx = await authorizeInvitationManagement(invitationId);
   return runAction(async () => {
     await revokeInvitation(invitationId, ctx.userId);
-    return { revalidate: ["/admin/team"] };
+    return { revalidate: ["/admin/team", "/portal/users"] };
   });
 }
 

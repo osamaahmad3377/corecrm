@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { requireInternal } from "@/server/auth/context";
 import { PageHeader } from "@/components/page-header";
 import { SettingsNav } from "./settings-nav";

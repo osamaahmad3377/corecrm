@@ -3,7 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/server/db/client";
 import { AuthContext, can } from "@/server/auth/rbac";
 import { conflict, forbidden, notFound, validationError } from "@/lib/errors";
-import { sanitizeMessageHtml, textToHtml, snippet } from "@/lib/sanitize";
+import { sanitizeMessageHtml, textToHtml } from "@/lib/sanitize";
 import { nextTicketNumber } from "./ticket-number";
 import { recordAudit } from "./audit";
 import { notificationService } from "./notification";

@@ -19,7 +19,6 @@ import {
   createTicketFromPortal,
   createTicketInternal,
 } from "@/server/services/ticket";
-import { AppError } from "@/lib/errors";
 
 export async function createPortalTicketAction(
   _prev: ActionState,

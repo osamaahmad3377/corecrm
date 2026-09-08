@@ -1,39 +1,48 @@
-import DOMPurify from "isomorphic-dompurify";
+import sanitizeHtml from "sanitize-html";
 
 /**
  * Sanitise user- or email-provided HTML before it is stored or rendered.
  * Ticket messages accept a small formatting subset; email bodies keep more
- * structure but are still stripped of scripts, event handlers and styles and
- * are additionally rendered inside a sandboxed iframe on the client.
+ * structure but are still stripped of scripts, styles and handlers and are
+ * additionally rendered inside a sandboxed iframe on the client.
+ *
+ * Uses `sanitize-html` (htmlparser2 based — no jsdom), so it runs cleanly in
+ * serverless/edge bundling.
  */
 
-const MESSAGE_CONFIG = {
-  ALLOWED_TAGS: [
+const MESSAGE_OPTIONS: sanitizeHtml.IOptions = {
+  allowedTags: [
     "p", "br", "b", "strong", "i", "em", "u", "s", "a", "ul", "ol", "li",
     "blockquote", "pre", "code", "span", "h1", "h2", "h3", "h4",
   ],
-  ALLOWED_ATTR: ["href", "target", "rel"],
-  ALLOW_DATA_ATTR: false,
-  ADD_ATTR: ["target"],
+  allowedAttributes: { a: ["href", "target", "rel"] },
+  allowedSchemes: ["http", "https", "mailto"],
+  transformTags: {
+    a: sanitizeHtml.simpleTransform("a", {
+      target: "_blank",
+      rel: "noopener noreferrer nofollow",
+    }),
+  },
 };
 
-const EMAIL_CONFIG = {
-  FORBID_TAGS: ["script", "style", "iframe", "object", "embed", "form", "link", "meta"],
-  FORBID_ATTR: ["style", "srcset"],
-  ALLOW_DATA_ATTR: false,
+const EMAIL_OPTIONS: sanitizeHtml.IOptions = {
+  allowedTags: sanitizeHtml.defaults.allowedTags.filter(
+    (t) => !["script", "style", "iframe", "object", "embed", "form"].includes(t),
+  ),
+  allowedAttributes: {
+    ...sanitizeHtml.defaults.allowedAttributes,
+    "*": ["align", "color", "width", "height", "colspan", "rowspan"],
+  },
+  allowedSchemes: ["http", "https", "mailto", "cid", "data"],
+  disallowedTagsMode: "discard",
 };
 
 export function sanitizeMessageHtml(dirty: string): string {
-  const clean = DOMPurify.sanitize(dirty, MESSAGE_CONFIG) as unknown as string;
-  // Force safe link behaviour.
-  return clean.replace(
-    /<a /g,
-    '<a target="_blank" rel="noopener noreferrer nofollow" ',
-  );
+  return sanitizeHtml(dirty, MESSAGE_OPTIONS);
 }
 
 export function sanitizeEmailHtml(dirty: string): string {
-  return DOMPurify.sanitize(dirty, EMAIL_CONFIG) as unknown as string;
+  return sanitizeHtml(dirty, EMAIL_OPTIONS);
 }
 
 /** Plain-text → minimal safe HTML (newlines become <br>). */
@@ -46,16 +55,8 @@ export function textToHtml(text: string): string {
 }
 
 export function htmlToText(html: string): string {
-  return html
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<\/(p|div|h[1-6]|li|blockquote)>/gi, "\n")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<[^>]+>/g, "")
+  return sanitizeHtml(html, { allowedTags: [], allowedAttributes: {} })
     .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
