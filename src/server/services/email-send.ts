@@ -118,6 +118,49 @@ export async function sendSupportEmail(args: SendArgs) {
   return { ok: true };
 }
 
+/** Triage an inbound email that is not a support request. */
+export async function markEmailHandled(
+  ctx: AuthContext,
+  emailMessageId: string,
+  status: "INFO" | "IGNORED",
+  meta?: { ipAddress?: string | null; userAgent?: string | null },
+) {
+  if (!can(ctx, "email.triage")) throw forbidden();
+  const email = await prisma.emailMessage.findUnique({
+    where: { id: emailMessageId },
+    select: { id: true, ticketId: true, subject: true, emailAccount: { select: { address: true } } },
+  });
+  if (!email) throw notFound("Email not found");
+  if (email.ticketId) {
+    throw validationError("This email is already linked to a ticket");
+  }
+  await prisma.emailMessage.update({
+    where: { id: emailMessageId },
+    data: { handledStatus: status, handledById: ctx.userId, handledAt: new Date() },
+  });
+  await recordAudit({
+    action: "EMAIL_RECEIVED",
+    entityType: "emailMessage",
+    entityId: emailMessageId,
+    actorUserId: ctx.userId,
+    ipAddress: meta?.ipAddress,
+    userAgent: meta?.userAgent,
+    metadata: { triage: status, subject: email.subject, account: email.emailAccount.address },
+  });
+}
+
+/** Undo a triage decision (returns the email to the queue). */
+export async function clearEmailHandled(
+  ctx: AuthContext,
+  emailMessageId: string,
+) {
+  if (!can(ctx, "email.triage")) throw forbidden();
+  await prisma.emailMessage.updateMany({
+    where: { id: emailMessageId },
+    data: { handledStatus: null, handledById: null, handledAt: null },
+  });
+}
+
 interface ConvertArgs {
   ctx: AuthContext;
   emailMessageId: string;

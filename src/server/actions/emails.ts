@@ -9,7 +9,12 @@ import {
   syncAccount,
   updateEmailAccount,
 } from "@/server/services/email-account";
-import { convertEmailToTicket, sendSupportEmail } from "@/server/services/email-send";
+import {
+  clearEmailHandled,
+  convertEmailToTicket,
+  markEmailHandled,
+  sendSupportEmail,
+} from "@/server/services/email-send";
 
 const sendSchema = z.object({
   emailAccountId: z.string().uuid(),
@@ -106,6 +111,31 @@ export async function disconnectEmailAccountAction(
     const meta = await requestMeta();
     await disconnectEmailAccount(ctx, id, meta);
     return { revalidate: ["/admin/emails/accounts"] };
+  });
+}
+
+export async function markEmailHandledAction(
+  emailMessageId: string,
+  status: "INFO" | "IGNORED",
+): Promise<ActionState> {
+  const ctx = await requirePermission("email.triage");
+  return runAction(async () => {
+    const meta = await requestMeta();
+    await markEmailHandled(ctx, emailMessageId, status, meta);
+    return {
+      message: status === "INFO" ? "Marked as info" : "Ignored",
+      revalidate: ["/admin/emails/inbox", "/admin/emails", "/admin"],
+    };
+  });
+}
+
+export async function clearEmailHandledAction(
+  emailMessageId: string,
+): Promise<ActionState> {
+  const ctx = await requirePermission("email.triage");
+  return runAction(async () => {
+    await clearEmailHandled(ctx, emailMessageId);
+    return { revalidate: ["/admin/emails/inbox", "/admin/emails"] };
   });
 }
 

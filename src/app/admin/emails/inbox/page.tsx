@@ -8,7 +8,8 @@ import { EmptyState } from "@/components/states";
 import { SearchInput } from "@/components/search-input";
 import { Card } from "@/components/ui/card";
 import { ToneBadge } from "@/components/badges";
-import { ConvertToTicketButton } from "@/components/emails/convert-to-ticket";
+import { TriageActions } from "@/components/emails/triage-actions";
+import { can } from "@/server/auth/rbac";
 import { cn } from "@/lib/utils";
 import { formatDateTime, formatRelative } from "@/lib/format";
 import { Mail, Paperclip, ArrowLeft } from "lucide-react";
@@ -22,9 +23,11 @@ export default async function InboxPage({
     account?: string;
     message?: string;
     q?: string;
+    view?: string;
   }>;
 }) {
   const ctx = await requirePermission("email.inbox.view");
+  const canTriage = can(ctx, "email.triage");
   const sp = await searchParams;
 
   const accounts = await prisma.emailAccount.findMany({
@@ -41,6 +44,19 @@ export default async function InboxPage({
       { bodyText: { contains: sp.q, mode: "insensitive" } },
       { snippet: { contains: sp.q, mode: "insensitive" } },
     ];
+  }
+  // Triage filter (default: hide ignored emails).
+  const view = sp.view ?? "active";
+  if (view === "needs-triage") {
+    where.direction = "INBOUND";
+    where.ticketId = null;
+    where.handledStatus = null;
+  } else if (view === "info") {
+    where.handledStatus = "INFO";
+  } else if (view === "ignored") {
+    where.handledStatus = "IGNORED";
+  } else if (view === "active") {
+    where.NOT = { handledStatus: "IGNORED" };
   }
 
   const messages = await prisma.emailMessage.findMany({
@@ -157,8 +173,36 @@ export default async function InboxPage({
         {/* Message list + detail */}
         <div className="grid gap-4 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
           <div className={cn("min-w-0", selected && "hidden lg:block")}>
-            <div className="mb-3">
+            <div className="mb-3 space-y-2">
               <SearchInput placeholder="Search email…" />
+              <div className="flex flex-wrap gap-1">
+                {[
+                  ["active", "Active"],
+                  ["needs-triage", "Needs triage"],
+                  ["info", "Info"],
+                  ["ignored", "Ignored"],
+                  ["all", "All"],
+                ].map(([key, label]) => {
+                  const params = new URLSearchParams();
+                  if (sp.account) params.set("account", sp.account);
+                  if (sp.q) params.set("q", sp.q);
+                  if (key !== "active") params.set("view", key);
+                  return (
+                    <Link
+                      key={key}
+                      href={`/admin/emails/inbox?${params.toString()}`}
+                      className={cn(
+                        "rounded-md px-2 py-1 text-xs font-medium",
+                        view === key
+                          ? "bg-accent text-accent-foreground"
+                          : "text-muted-foreground hover:bg-accent/50",
+                      )}
+                    >
+                      {label}
+                    </Link>
+                  );
+                })}
+              </div>
             </div>
             {messages.length === 0 ? (
               <EmptyState title="No messages" />
@@ -192,8 +236,12 @@ export default async function InboxPage({
                           <ToneBadge tone="success">
                             {m.ticket.ticketNumber}
                           </ToneBadge>
+                        ) : m.handledStatus === "INFO" ? (
+                          <ToneBadge tone="info">Info</ToneBadge>
+                        ) : m.handledStatus === "IGNORED" ? (
+                          <ToneBadge tone="neutral">Ignored</ToneBadge>
                         ) : m.direction === "INBOUND" ? (
-                          <ToneBadge tone="warning">Unlinked</ToneBadge>
+                          <ToneBadge tone="warning">Needs triage</ToneBadge>
                         ) : (
                           <ToneBadge tone="info">Sent</ToneBadge>
                         )}
@@ -263,8 +311,12 @@ export default async function InboxPage({
                         {selected.ticket.ticketNumber} →
                       </Link>
                     ) : (
-                      selected.direction === "INBOUND" && (
-                        <ConvertToTicketButton emailMessageId={selected.id} />
+                      selected.direction === "INBOUND" &&
+                      canTriage && (
+                        <TriageActions
+                          emailMessageId={selected.id}
+                          handledStatus={selected.handledStatus}
+                        />
                       )
                     )}
                   </div>

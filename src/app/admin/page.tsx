@@ -6,6 +6,7 @@ import {
   ticketChartData,
   listTickets,
 } from "@/server/services/ticket";
+import { platformStats } from "@/server/services/analytics";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,13 +22,17 @@ import {
   UserCheck,
   CheckCircle2,
   Plus,
+  Building2,
+  Users,
+  Mail,
+  MonitorSmartphone,
 } from "lucide-react";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
 export default async function AdminDashboard() {
   const ctx = await requireInternal();
-  const [stats, charts, recent] = await Promise.all([
+  const [stats, charts, recent, platform] = await Promise.all([
     internalDashboardStats(ctx),
     ticketChartData(),
     listTickets(ctx, {
@@ -36,7 +41,9 @@ export default async function AdminDashboard() {
       pageSize: 25,
       sort: "newest",
     } as never),
+    platformStats(),
   ]);
+  const cb = platform.channelBreakdown;
 
   const recentTickets = recent.items.slice(0, 8);
 
@@ -53,6 +60,42 @@ export default async function AdminDashboard() {
           </Button>
         }
       />
+
+      <div className="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <StatCard
+          label="Clients"
+          value={platform.clients}
+          hint={`${platform.activeClients} active`}
+          icon={Building2}
+          href="/admin/organizations"
+        />
+        <StatCard
+          label="Employees"
+          value={platform.employees}
+          hint={`${platform.activeEmployees} active`}
+          icon={Users}
+          href="/admin/team"
+        />
+        <StatCard
+          label="Groups"
+          value={platform.groups}
+          hint={`${platform.activeGroups} active`}
+          icon={Users}
+          href="/admin/team"
+        />
+        <StatCard
+          label="Active tickets"
+          value={platform.activeTickets}
+          icon={Inbox}
+          href="/admin/tickets?status=OPEN_ALL"
+        />
+        <StatCard
+          label="Closed tickets"
+          value={platform.closedTickets}
+          icon={CheckCircle2}
+          href="/admin/tickets?status=CLOSED"
+        />
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
@@ -177,6 +220,75 @@ export default async function AdminDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle className="text-sm">
+            How requests reached us
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            <Breakdown
+              icon={MonitorSmartphone}
+              label="Portal tickets"
+              value={cb.portalTickets}
+            />
+            <Breakdown icon={Mail} label="Email → ticket" value={cb.emailTickets} />
+            <Breakdown
+              icon={Plus}
+              label="Logged by staff"
+              value={cb.internalTickets}
+            />
+            <Breakdown
+              icon={Mail}
+              label="Email — info only"
+              value={cb.emailInfo}
+            />
+            <Breakdown
+              icon={Mail}
+              label="Email — ignored"
+              value={cb.emailIgnored}
+            />
+            <Breakdown
+              icon={AlertTriangle}
+              label="Email — needs triage"
+              value={cb.emailUnhandled}
+              tone={cb.emailUnhandled > 0 ? "warning" : undefined}
+            />
+          </div>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Emails that aren&apos;t a support request are marked &ldquo;info&rdquo;
+            or &ldquo;ignored&rdquo; in the inbox and don&apos;t create tickets.
+          </p>
+        </CardContent>
+      </Card>
     </>
+  );
+}
+
+function Breakdown({
+  icon: Icon,
+  label,
+  value,
+  tone,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: number;
+  tone?: "warning";
+}) {
+  return (
+    <div className="rounded-lg border p-3">
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Icon className="size-3.5" />
+        {label}
+      </div>
+      <p
+        className={`mt-1 text-xl font-semibold tabular-nums ${tone === "warning" ? "text-warning-foreground" : ""}`}
+      >
+        {value}
+      </p>
+    </div>
   );
 }
