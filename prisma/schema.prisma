@@ -1,0 +1,823 @@
+// CoreCRM — IT Support & Client Portal
+// Single-tenant: one company, one database. The Organization is the security
+// boundary for client data. There is no Tenant model / tenantId by design.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ===========================================================================
+//  ENUMS
+// ===========================================================================
+
+enum InternalRole {
+  SUPER_ADMIN
+  ADMIN
+  SUPPORT_MANAGER
+  SUPPORT_AGENT
+}
+
+enum ClientRole {
+  CLIENT_ADMIN
+  CLIENT_USER
+}
+
+enum UserStatus {
+  INVITED
+  ACTIVE
+  DISABLED
+}
+
+enum OrganizationStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
+enum TicketSource {
+  PORTAL
+  EMAIL
+  INTERNAL
+}
+
+enum MessageType {
+  PUBLIC_REPLY
+  INTERNAL_NOTE
+}
+
+enum AuthorType {
+  CLIENT
+  AGENT
+  SYSTEM
+}
+
+enum PreferredContactMethod {
+  EMAIL
+  PHONE
+  PORTAL
+}
+
+enum ImpactLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum UrgencyLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum TicketActivityType {
+  CREATED
+  STATUS_CHANGED
+  PRIORITY_CHANGED
+  CATEGORY_CHANGED
+  ASSIGNED
+  TEAM_ASSIGNED
+  UNASSIGNED
+  REASSIGNED
+  PUBLIC_REPLY
+  INTERNAL_NOTE
+  ATTACHMENT_ADDED
+  RESOLVED
+  REOPENED
+  CLOSED
+  EMAIL_LINKED
+  SLA_RESPONSE_BREACHED
+  SLA_RESOLUTION_BREACHED
+}
+
+enum EmailProviderKind {
+  MICROSOFT
+  GOOGLE
+}
+
+enum EmailAccountStatus {
+  CONNECTED
+  DISCONNECTED
+  ERROR
+}
+
+enum EmailAccountScope {
+  GLOBAL
+  ORGANIZATION
+  TEAM
+}
+
+enum EmailDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum AssetType {
+  LAPTOP
+  DESKTOP
+  SERVER
+  PRINTER
+  ROUTER
+  FIREWALL
+  MOBILE
+  M365_TENANT
+  WEBSITE
+  DOMAIN
+  SOFTWARE
+  OTHER
+}
+
+enum NotificationType {
+  TICKET_CREATED
+  TICKET_ASSIGNED
+  TICKET_REPLY_CLIENT
+  TICKET_REPLY_AGENT
+  TICKET_STATUS_CHANGED
+  TICKET_RESOLVED
+  TICKET_SLA_BREACHED
+  EMAIL_ACCOUNT_FAILURE
+  MENTION
+}
+
+enum SettingScope {
+  GLOBAL
+  ORGANIZATION
+}
+
+// ===========================================================================
+//  IDENTITY & ORGANIZATIONS
+// ===========================================================================
+
+model User {
+  id             String        @id @default(uuid())
+  email          String        @unique
+  name           String
+  hashedPassword String?
+  emailVerified  DateTime?
+  image          String?
+  isInternal     Boolean       @default(false)
+  internalRole   InternalRole?
+  status         UserStatus    @default(INVITED)
+  timezone       String        @default("UTC")
+  lastLoginAt    DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  organizationLinks   OrganizationUser[]
+  teamLinks           TeamMember[]
+  accountManagerOf    Organization[]     @relation("AccountManager")
+  requestedTickets    Ticket[]           @relation("Requester")
+  assignedTickets     Ticket[]           @relation("AssignedAgent")
+  ticketMessages      TicketMessage[]
+  ticketActivities    TicketActivity[]
+  assignmentsMade     TicketAssignment[] @relation("AssignedBy")
+  assignmentsReceived TicketAssignment[] @relation("AssignedAgent")
+  invitationsSent     Invitation[]       @relation("InvitedBy")
+  uploadedFiles       File[]
+  notifications       Notification[]
+  auditLogs           AuditLog[]
+  assetsAssigned      Asset[]
+  sessions            Session[]
+  authAccounts        Account[]
+
+  @@index([isInternal, status])
+}
+
+model Organization {
+  id               String             @id @default(uuid())
+  name             String
+  legalName        String?
+  website          String?
+  industry         String?
+  addressLine1     String?
+  addressLine2     String?
+  city             String?
+  state            String?
+  country          String?
+  postalCode       String?
+  mainPhone        String?
+  mainEmail        String?
+  status           OrganizationStatus @default(ACTIVE)
+  notes            String?
+  accountManagerId String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  accountManager User?              @relation("AccountManager", fields: [accountManagerId], references: [id], onDelete: SetNull)
+  userLinks      OrganizationUser[]
+  contacts       Contact[]
+  tickets        Ticket[]
+  assets         Asset[]
+  invitations    Invitation[]
+  slaPolicies    SlaPolicy[]
+  emailAccounts  EmailAccount[]
+  emailThreads   EmailThread[]
+  emailMessages  EmailMessage[]
+  settings       Setting[]
+
+  @@index([status])
+  @@index([name])
+}
+
+model OrganizationUser {
+  id             String     @id @default(uuid())
+  userId         String
+  organizationId String
+  role           ClientRole @default(CLIENT_USER)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+}
+
+model Invitation {
+  id             String           @id @default(uuid())
+  email          String
+  name           String
+  tokenHash      String           @unique
+  internalRole   InternalRole?
+  clientRole     ClientRole?
+  organizationId String?
+  invitedById    String
+  status         InvitationStatus @default(PENDING)
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invitedBy    User          @relation("InvitedBy", fields: [invitedById], references: [id], onDelete: Cascade)
+
+  // Only one active (PENDING) invitation per email address — enforced in the
+  // service layer plus this partial-friendly composite index.
+  @@index([email, status])
+  @@index([organizationId])
+}
+
+model VerificationToken {
+  identifier String
+  tokenHash  String   @unique
+  purpose    String // "PASSWORD_RESET" | "EMAIL_VERIFICATION"
+  expires    DateTime
+  createdAt  DateTime @default(now())
+
+  @@unique([identifier, purpose])
+}
+
+// Auth.js adapter tables (kept for future OAuth / SSO providers).
+model Account {
+  id                String  @id @default(uuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ===========================================================================
+//  TEAMS
+// ===========================================================================
+
+model Team {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members       TeamMember[]
+  tickets       Ticket[]
+  assignments   TicketAssignment[]
+  emailAccounts EmailAccount[]
+}
+
+model TeamMember {
+  id        String   @id @default(uuid())
+  teamId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@index([userId])
+}
+
+// ===========================================================================
+//  CONTACTS
+// ===========================================================================
+
+model Contact {
+  id             String   @id @default(uuid())
+  organizationId String
+  firstName      String
+  lastName       String
+  email          String
+  phone          String?
+  position       String?
+  isPrimary      Boolean  @default(false)
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tickets        Ticket[]
+  ticketMessages TicketMessage[]
+  emailThreads   EmailThread[]
+  emailMessages  EmailMessage[]
+
+  @@unique([organizationId, email])
+  @@index([email])
+}
+
+// ===========================================================================
+//  TICKET CONFIGURATION (configurable lookup tables)
+// ===========================================================================
+
+model TicketStatus {
+  id         String  @id @default(uuid())
+  key        String  @unique // NEW, OPEN, IN_PROGRESS, ...
+  label      String
+  colorToken String // design-token key, e.g. "status.open"
+  order      Int
+  isDefault  Boolean @default(false)
+  isTerminal Boolean @default(false) // RESOLVED / CLOSED / CANCELLED
+  isActive   Boolean @default(true)
+
+  tickets Ticket[]
+}
+
+model TicketPriority {
+  id         String  @id @default(uuid())
+  key        String  @unique // LOW, MEDIUM, HIGH, CRITICAL
+  label      String
+  colorToken String
+  order      Int
+  isDefault  Boolean @default(false)
+  isActive   Boolean @default(true)
+
+  tickets    Ticket[]
+  slaTargets SlaTarget[]
+}
+
+model TicketCategory {
+  id       String  @id @default(uuid())
+  name     String
+  parentId String?
+  isActive Boolean @default(true)
+  order    Int     @default(0)
+
+  parent      TicketCategory?  @relation("Subcategories", fields: [parentId], references: [id], onDelete: SetNull)
+  children    TicketCategory[] @relation("Subcategories")
+  ticketsMain Ticket[]         @relation("Category")
+  ticketsSub  Ticket[]         @relation("Subcategory")
+
+  @@unique([parentId, name])
+}
+
+// ===========================================================================
+//  SLA
+// ===========================================================================
+
+model SlaPolicy {
+  id             String   @id @default(uuid())
+  name           String
+  organizationId String? // null = global default
+  isDefault      Boolean  @default(false)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  targets      SlaTarget[]
+  tickets      Ticket[]
+
+  @@index([organizationId])
+}
+
+model SlaTarget {
+  id                String @id @default(uuid())
+  slaPolicyId       String
+  priorityId        String
+  responseMinutes   Int
+  resolutionMinutes Int
+
+  slaPolicy SlaPolicy      @relation(fields: [slaPolicyId], references: [id], onDelete: Cascade)
+  priority  TicketPriority @relation(fields: [priorityId], references: [id], onDelete: Cascade)
+
+  @@unique([slaPolicyId, priorityId])
+}
+
+// ===========================================================================
+//  TICKETS
+// ===========================================================================
+
+model Ticket {
+  id                     String                  @id @default(uuid())
+  ticketNumber           String                  @unique // TKT-2026-000001
+  organizationId         String
+  requesterContactId     String
+  requesterUserId        String?
+  subject                String
+  description            String
+  categoryId             String?
+  subcategoryId          String?
+  statusId               String
+  priorityId             String
+  assignedAgentId        String?
+  assignedTeamId         String?
+  slaPolicyId            String?
+  source                 TicketSource            @default(PORTAL)
+  service                String?
+  assetId                String?
+  location               String?
+  contactPhone           String?
+  preferredContactMethod PreferredContactMethod?
+  impact                 ImpactLevel?
+  urgency                UrgencyLevel?
+  firstResponseAt        DateTime?
+  responseDueAt          DateTime?
+  resolutionDueAt        DateTime?
+  resolvedAt             DateTime?
+  closedAt               DateTime?
+  reopenedAt             DateTime?
+  responseBreached       Boolean                 @default(false)
+  resolutionBreached     Boolean                 @default(false)
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+
+  organization  Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  requester     Contact         @relation(fields: [requesterContactId], references: [id])
+  requesterUser User?           @relation("Requester", fields: [requesterUserId], references: [id], onDelete: SetNull)
+  category      TicketCategory? @relation("Category", fields: [categoryId], references: [id], onDelete: SetNull)
+  subcategory   TicketCategory? @relation("Subcategory", fields: [subcategoryId], references: [id], onDelete: SetNull)
+  status        TicketStatus    @relation(fields: [statusId], references: [id])
+  priority      TicketPriority  @relation(fields: [priorityId], references: [id])
+  assignedAgent User?           @relation("AssignedAgent", fields: [assignedAgentId], references: [id], onDelete: SetNull)
+  assignedTeam  Team?           @relation(fields: [assignedTeamId], references: [id], onDelete: SetNull)
+  slaPolicy     SlaPolicy?      @relation(fields: [slaPolicyId], references: [id], onDelete: SetNull)
+  asset         Asset?          @relation(fields: [assetId], references: [id], onDelete: SetNull)
+
+  messages      TicketMessage[]
+  attachments   TicketAttachment[]
+  assignments   TicketAssignment[]
+  activities    TicketActivity[]
+  tags          TicketTag[]
+  emailThreads  EmailThread[]
+  emailMessages EmailMessage[]
+
+  @@index([organizationId, statusId])
+  @@index([assignedAgentId])
+  @@index([priorityId])
+  @@index([statusId])
+  @@index([createdAt])
+  @@index([responseDueAt])
+  @@index([resolutionDueAt])
+}
+
+model TicketMessage {
+  id              String      @id @default(uuid())
+  ticketId        String
+  authorUserId    String?
+  authorContactId String?
+  authorType      AuthorType
+  messageType     MessageType @default(PUBLIC_REPLY)
+  body            String // sanitized HTML
+  emailMessageId  String?     @unique
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  ticket        Ticket             @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorUser    User?              @relation(fields: [authorUserId], references: [id], onDelete: SetNull)
+  authorContact Contact?           @relation(fields: [authorContactId], references: [id], onDelete: SetNull)
+  emailMessage  EmailMessage?      @relation(fields: [emailMessageId], references: [id], onDelete: SetNull)
+  attachments   TicketAttachment[]
+
+  @@index([ticketId, createdAt])
+}
+
+model TicketAttachment {
+  id              String   @id @default(uuid())
+  ticketId        String
+  ticketMessageId String?
+  fileId          String
+  createdAt       DateTime @default(now())
+
+  ticket        Ticket         @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  ticketMessage TicketMessage? @relation(fields: [ticketMessageId], references: [id], onDelete: Cascade)
+  file          File           @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+}
+
+model TicketAssignment {
+  id           String    @id @default(uuid())
+  ticketId     String
+  agentId      String?
+  teamId       String?
+  assignedById String
+  assignedAt   DateTime  @default(now())
+  unassignedAt DateTime?
+
+  ticket     Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  agent      User?  @relation("AssignedAgent", fields: [agentId], references: [id], onDelete: SetNull)
+  team       Team?  @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  assignedBy User   @relation("AssignedBy", fields: [assignedById], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+}
+
+model TicketActivity {
+  id          String             @id @default(uuid())
+  ticketId    String
+  actorUserId String?
+  type        TicketActivityType
+  fromValue   String?
+  toValue     String?
+  metadata    Json?
+  createdAt   DateTime           @default(now())
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  actor  User?  @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([ticketId, createdAt])
+}
+
+model Tag {
+  id         String      @id @default(uuid())
+  name       String      @unique
+  colorToken String      @default("tag.neutral")
+  tickets    TicketTag[]
+}
+
+model TicketTag {
+  ticketId String
+  tagId    String
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([ticketId, tagId])
+}
+
+// ===========================================================================
+//  EMAIL
+// ===========================================================================
+
+model EmailAccount {
+  id                    String             @id @default(uuid())
+  displayName           String
+  address               String             @unique
+  provider              EmailProviderKind
+  status                EmailAccountStatus @default(DISCONNECTED)
+  scope                 EmailAccountScope  @default(GLOBAL)
+  organizationId        String?
+  teamId                String?
+  externalAccountId     String?
+  isActive              Boolean            @default(true)
+  lastSyncedAt          DateTime?
+  lastError             String?
+  deltaCursor           String? // Graph deltaLink / Gmail historyId
+  subscriptionId        String?
+  subscriptionExpiresAt DateTime?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  organization Organization?           @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  team         Team?                   @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  credential   EmailAccountCredential?
+  threads      EmailThread[]
+  messages     EmailMessage[]
+
+  @@index([organizationId])
+  @@index([status])
+}
+
+model EmailAccountCredential {
+  id                    String   @id @default(uuid())
+  emailAccountId        String   @unique
+  encryptedAccessToken  String
+  encryptedRefreshToken String
+  tokenExpiresAt        DateTime
+  scope                 String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  emailAccount EmailAccount @relation(fields: [emailAccountId], references: [id], onDelete: Cascade)
+}
+
+model EmailThread {
+  id               String   @id @default(uuid())
+  emailAccountId   String
+  providerThreadId String
+  subject          String?
+  ticketId         String?
+  organizationId   String?
+  contactId        String?
+  lastMessageAt    DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  emailAccount EmailAccount   @relation(fields: [emailAccountId], references: [id], onDelete: Cascade)
+  ticket       Ticket?        @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+  organization Organization?  @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  contact      Contact?       @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  messages     EmailMessage[]
+
+  @@unique([emailAccountId, providerThreadId])
+  @@index([ticketId])
+  @@index([organizationId])
+}
+
+model EmailMessage {
+  id                String         @id @default(uuid())
+  emailThreadId     String
+  emailAccountId    String
+  providerMessageId String
+  internetMessageId String?
+  direction         EmailDirection
+  fromAddress       String
+  fromName          String?
+  toAddresses       Json
+  ccAddresses       Json?
+  subject           String?
+  bodyHtml          String?
+  bodyText          String?
+  snippet           String?
+  inReplyTo         String?
+  references        Json?
+  isRead            Boolean        @default(false)
+  hasAttachments    Boolean        @default(false)
+  ticketId          String?
+  contactId         String?
+  organizationId    String?
+  receivedAt        DateTime?
+  sentAt            DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  emailThread   EmailThread       @relation(fields: [emailThreadId], references: [id], onDelete: Cascade)
+  emailAccount  EmailAccount      @relation(fields: [emailAccountId], references: [id], onDelete: Cascade)
+  ticket        Ticket?           @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+  contact       Contact?          @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  organization  Organization?     @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  attachments   EmailAttachment[]
+  ticketMessage TicketMessage?
+
+  // Idempotency key — the same provider message is never stored twice.
+  @@unique([emailAccountId, providerMessageId])
+  @@index([emailThreadId])
+  @@index([ticketId])
+  @@index([direction, createdAt])
+}
+
+model EmailAttachment {
+  id                   String   @id @default(uuid())
+  emailMessageId       String
+  fileId               String
+  providerAttachmentId String?
+  createdAt            DateTime @default(now())
+
+  emailMessage EmailMessage @relation(fields: [emailMessageId], references: [id], onDelete: Cascade)
+  file         File         @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@index([emailMessageId])
+}
+
+// ===========================================================================
+//  FILES / ASSETS
+// ===========================================================================
+
+model File {
+  id           String   @id @default(uuid())
+  filename     String
+  mimeType     String
+  size         Int
+  storageKey   String   @unique
+  provider     String   @default("LOCAL") // LOCAL | VERCEL_BLOB
+  url          String?
+  checksum     String?
+  uploadedById String?
+  createdAt    DateTime @default(now())
+
+  uploadedBy        User?              @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  ticketAttachments TicketAttachment[]
+  emailAttachments  EmailAttachment[]
+}
+
+model Asset {
+  id             String    @id @default(uuid())
+  organizationId String
+  name           String
+  assetType      AssetType
+  serialNumber   String?
+  model          String?
+  manufacturer   String?
+  ipAddress      String?
+  hostname       String?
+  purchaseDate   DateTime?
+  warrantyExpiry DateTime?
+  assignedUserId String?
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignedUser User?        @relation(fields: [assignedUserId], references: [id], onDelete: SetNull)
+  tickets      Ticket[]
+
+  @@index([organizationId])
+}
+
+// ===========================================================================
+//  NOTIFICATIONS / AUDIT / SETTINGS
+// ===========================================================================
+
+model Notification {
+  id         String           @id @default(uuid())
+  userId     String
+  type       NotificationType
+  title      String
+  body       String
+  entityType String?
+  entityId   String?
+  linkUrl    String?
+  channels   Json? // ["IN_APP","EMAIL"]
+  readAt     DateTime?
+  createdAt  DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  actorUserId String?
+  action      String
+  entityType  String
+  entityId    String?
+  ipAddress   String?
+  userAgent   String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  actor User? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([actorUserId])
+  @@index([createdAt])
+}
+
+model Setting {
+  id             String       @id @default(uuid())
+  scope          SettingScope @default(GLOBAL)
+  organizationId String?
+  key            String
+  value          Json
+  updatedAt      DateTime     @updatedAt
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([scope, organizationId, key])
+}
+
+model Counter {
+  id    String @id // e.g. "ticket:2026"
+  value Int    @default(0)
+}
