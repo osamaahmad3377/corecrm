@@ -671,6 +671,44 @@ advanced reports, billing.
 
 ---
 
+## 18a. Requirements delta (2026-09-08 client answers)
+
+- **Three portals, not two.** Support Agents get a dedicated minimal
+  **`/employee`** portal (My Tasks + task detail + notifications + profile);
+  Managers/Admins use **`/admin`**; clients use **`/portal`**. Middleware routes
+  each role to its home. Admins/Managers may also open `/employee`.
+- **Admin → client portal** via **"View as client"** on an organization
+  (signed short-lived cookie, `requirePortalAuth` returns a scoped
+  `CLIENT_USER` context, banner + exit, audit-logged). No global `/portal`
+  access for staff.
+- **Hard delete organization** — typed-name confirmation; cascades every
+  contact / ticket / conversation / attachment / email thread and removes
+  client users that belonged only to that org. "Disable" is still the softer
+  option.
+- **Ticket deadlines** — `Ticket.dueAt`, a manual date/time distinct from SLA,
+  editable by any staff member (`ticket.setDueDate`), shown on the ticket and
+  fed into the employee "overdue / due today" stats.
+- **Email triage** — inbox actions per unlinked inbound email:
+  **Create ticket** · **Mark as info** · **Ignore** (+ undo), with filter tabs
+  (Active / Needs triage / Info / Ignored / All). Counts feed the dashboard
+  "how requests reached us" breakdown.
+- **DB-backed email templates** — `EmailTemplate` rows (8 built-ins seeded,
+  `isSystem`), edited/reset/created under **Settings → Templates**
+  (`emailTemplate.manage`). `renderTemplate(key, vars)` does `{{var}}`
+  substitution + shared layout; falls back to the registry default.
+- **Team management** — create / edit / delete teams, `Team.status`
+  (ACTIVE/INACTIVE), add/remove members, all on `/admin/team`.
+- **Admin-initiated password reset** — "Send reset" on any user row
+  (`user.resetPassword`) triggers the normal reset email.
+- **Onboarding schema** — Organization gains `businessHours`, `location`,
+  `sharepointUrl`, `onboardingDate` (today by default); Client-KPI view
+  (name / org / onboarding date / raised / closed / SharePoint / website) on
+  the org page and in Reports.
+- **Analytics** — dashboard + reports show client / employee / group counts,
+  active vs closed tickets, and the request-channel breakdown.
+
+---
+
 ## 19. Definition of Done (per feature)
 
 UI · backend · database integration · Zod validation · server-side authorization

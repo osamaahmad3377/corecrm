@@ -67,22 +67,44 @@ npm run db:migrate     npm run db:migrate:deploy
 npm run db:seed        npm run db:reset        npm run db:studio
 ```
 
+## Three portals
+
+| Portal | Who | What |
+| --- | --- | --- |
+| `/admin` | Super Admin · Admin · Support Manager | Everything: onboarding, assignment, teams, SLA, email center, settings, analytics |
+| `/employee` | Support Agent (Managers/Admins too) | Focused "My Tasks" queue + ticket conversations + notifications |
+| `/portal` | Client users | Raise / track tickets, talk to support, org & users |
+
+Admins/Managers can open a client's portal read-as-them via **View as client**
+on the organization page.
+
 ## What's implemented
 
-**Ticketing & portal** — invitation-based auth, RBAC + organization isolation,
-organizations & onboarding, contacts, users, tickets (create / list / filter /
-detail), conversation, internal notes, assignment, status & priority, categories,
-attachments (Vercel Blob / local), activity timeline, SLA computation + breach
-cron, dashboards + charts, audit log, in-app + email notifications, ⌘K command
-palette.
+**Ticketing & portals** — invitation auth + password reset (self-service &
+admin-initiated), RBAC + organization isolation, organizations & onboarding
+(business hours, location, SharePoint link, onboarding date), contacts, users,
+teams (create / members / active-inactive), tickets (create / list / filter /
+detail), conversation, internal notes, assignment to agent **or** team, status &
+priority, **manual deadlines**, categories, attachments (Vercel Blob / local),
+activity timeline, SLA computation + breach cron, dashboards + charts (clients /
+employees / groups / active / closed + request-channel breakdown), Client KPI
+report, audit log, in-app + email notifications, ⌘K command palette.
 
 **Email Center** — `EmailProvider` abstraction with Microsoft Graph + Gmail
 implementations, OAuth connect flow, account management + org/team scoping,
-inbox, send/reply from a support mailbox, threading + idempotent ingestion,
-email → ticket, ticket → email, provider webhooks, reconciliation cron.
+inbox with **triage** (create ticket · mark as info · ignore), send/reply from a
+support mailbox, threading + idempotent ingestion, email → ticket, ticket →
+email, provider webhooks, reconciliation cron.
 *Connecting a live mailbox needs a Microsoft/Google OAuth app — see
 [docs/EMAIL_INTEGRATION.md](docs/EMAIL_INTEGRATION.md). Everything else works
 without it.*
+
+**Settings** — company/general, ticket categories & priorities, SLA policies,
+**editable email templates** (8 built-ins + custom), email accounts, security +
+audit log, profile.
+
+**Danger zone** — hard-delete an organization (typed-name confirm, cascades all
+its data).
 
 ## Docs
 

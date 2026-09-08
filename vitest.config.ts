@@ -20,5 +20,7 @@ export default defineConfig({
     exclude: ["tests/e2e/**", "node_modules/**"],
     testTimeout: 20000,
     hookTimeout: 30000,
+    // Integration tests share one database — run files sequentially.
+    fileParallelism: false,
   },
 });
