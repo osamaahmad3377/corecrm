@@ -4,9 +4,14 @@ import { AppError, toAppError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { requestMeta } from "@/server/auth/context";
 
-export type ActionState<T = unknown> =
-  | { ok: true; data?: T; message?: string }
-  | { ok: false; error: string; code?: string; fieldErrors?: Record<string, string[]> };
+export interface ActionState<T = unknown> {
+  ok: boolean;
+  data?: T;
+  message?: string;
+  error?: string;
+  code?: string;
+  fieldErrors?: Record<string, string[]>;
+}
 
 export async function runAction<T>(
   fn: () => Promise<{ data?: T; message?: string; revalidate?: string[] }>,
