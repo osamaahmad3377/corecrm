@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
-import { requirePermission } from "@/server/auth/context";
+import { guardPage, requirePermission } from "@/server/auth/context";
 import { PageHeader } from "@/components/page-header";
 import { OnboardForm } from "@/components/organizations/onboard-form";
 
 export const metadata: Metadata = { title: "Onboard organization" };
 
 export default async function NewOrganizationPage() {
-  await requirePermission("org.create");
+  await guardPage(() => requirePermission("org.create"));
   return (
     <div className="mx-auto max-w-3xl">
       <PageHeader

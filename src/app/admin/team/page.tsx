@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { requireInternal } from "@/server/auth/context";
+import { guardPage, requireInternal } from "@/server/auth/context";
 import { can } from "@/server/auth/rbac";
 import { listInternalUsers } from "@/server/services/user";
 import { prisma } from "@/server/db/client";
@@ -27,7 +27,7 @@ import { formatRelative } from "@/lib/format";
 export const metadata: Metadata = { title: "Team" };
 
 export default async function TeamPage() {
-  const ctx = await requireInternal("SUPPORT_MANAGER");
+  const ctx = await guardPage(() => requireInternal("SUPPORT_MANAGER"));
   const manageUsers = can(ctx, "internal.users.manage");
 
   const [users, teams, invitations] = await Promise.all([

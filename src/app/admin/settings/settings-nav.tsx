@@ -4,17 +4,22 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
-const items = [
-  { label: "General", href: "/admin/settings" },
+const ALL = [
+  { label: "General", href: "/admin/settings", adminOnly: true },
   { label: "Categories", href: "/admin/settings/categories" },
   { label: "Priorities", href: "/admin/settings/priorities" },
   { label: "SLA", href: "/admin/settings/sla" },
-  { label: "Security", href: "/admin/settings/security" },
+  { label: "Security", href: "/admin/settings/security", adminOnly: true },
   { label: "Profile", href: "/admin/settings/profile" },
 ];
 
-export function SettingsNav() {
+export function SettingsNav({
+  canManageGeneral,
+}: {
+  canManageGeneral: boolean;
+}) {
   const pathname = usePathname();
+  const items = ALL.filter((i) => !i.adminOnly || canManageGeneral);
   return (
     <nav className="flex gap-1 overflow-x-auto lg:flex-col">
       {items.map((item) => (

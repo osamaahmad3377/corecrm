@@ -1,4 +1,5 @@
-import { requireInternal } from "@/server/auth/context";
+import { guardPage, requireInternal } from "@/server/auth/context";
+import { can } from "@/server/auth/rbac";
 import { PageHeader } from "@/components/page-header";
 import { SettingsNav } from "./settings-nav";
 
@@ -7,7 +8,9 @@ export default async function SettingsLayout({
 }: {
   children: React.ReactNode;
 }) {
-  await requireInternal("SUPPORT_MANAGER");
+  const ctx = await guardPage(() => requireInternal("SUPPORT_MANAGER"));
+  const canManageGeneral = can(ctx, "internal.settings.manage");
+
   return (
     <>
       <PageHeader
@@ -15,7 +18,7 @@ export default async function SettingsLayout({
         description="Configure the helpdesk, ticket workflow and security."
       />
       <div className="grid gap-6 lg:grid-cols-[200px_1fr]">
-        <SettingsNav />
+        <SettingsNav canManageGeneral={canManageGeneral} />
         <div className="min-w-0">{children}</div>
       </div>
     </>

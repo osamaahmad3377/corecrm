@@ -1,12 +1,15 @@
 
+import { redirect } from "next/navigation";
 import { prisma } from "@/server/db/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/states";
 import { formatDateTime } from "@/lib/format";
-import { requireInternal } from "@/server/auth/context";
+import { guardPage, requireInternal } from "@/server/auth/context";
+import { can } from "@/server/auth/rbac";
 
 export default async function SecuritySettingsPage() {
-  const ctx = await requireInternal("SUPPORT_MANAGER");
+  const ctx = await guardPage(() => requireInternal("SUPPORT_MANAGER"));
+  if (!can(ctx, "internal.settings.manage")) redirect("/admin/settings/sla");
   const canAudit = ctx.internalRole === "ADMIN" || ctx.internalRole === "SUPER_ADMIN";
 
   const logs = canAudit

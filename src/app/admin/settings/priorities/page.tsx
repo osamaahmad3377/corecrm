@@ -1,10 +1,10 @@
-import { requireInternal } from "@/server/auth/context";
+import { guardPage, requireInternal } from "@/server/auth/context";
 import { getPriorities, getStatuses } from "@/server/services/lookups";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PriorityBadge, StatusBadge } from "@/components/badges";
 
 export default async function PrioritiesSettingsPage() {
-  await requireInternal("SUPPORT_MANAGER");
+  await guardPage(() => requireInternal("SUPPORT_MANAGER"));
   const [priorities, statuses] = await Promise.all([
     getPriorities(),
     getStatuses(),

@@ -1,10 +1,10 @@
-import { requireInternal } from "@/server/auth/context";
+import { guardPage, requireInternal } from "@/server/auth/context";
 import { prisma } from "@/server/db/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ToneBadge } from "@/components/badges";
 
 export default async function CategoriesSettingsPage() {
-  await requireInternal("SUPPORT_MANAGER");
+  await guardPage(() => requireInternal("SUPPORT_MANAGER"));
   const categories = await prisma.ticketCategory.findMany({
     where: { parentId: null },
     orderBy: { order: "asc" },

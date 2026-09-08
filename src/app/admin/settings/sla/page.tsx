@@ -1,4 +1,4 @@
-import { requireInternal } from "@/server/auth/context";
+import { guardPage, requireInternal } from "@/server/auth/context";
 import { prisma } from "@/server/db/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/states";
@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/table";
 
 export default async function SlaSettingsPage() {
-  await requireInternal("SUPPORT_MANAGER");
+  await guardPage(() => requireInternal("SUPPORT_MANAGER"));
   const policies = await prisma.slaPolicy.findMany({
     orderBy: [{ isDefault: "desc" }, { name: "asc" }],
     include: {

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import type { NavItem } from "./nav-config";
+import { NAV_ICONS } from "./icon-map";
 
 function isActive(
   item: NavItem,
@@ -33,7 +34,7 @@ export function SidebarNav({
     <nav className="flex flex-col gap-0.5 px-2 py-2">
       {items.map((item) => {
         const active = isActive(item, pathname, search);
-        const Icon = item.icon;
+        const Icon = NAV_ICONS[item.icon];
         const showChildren =
           item.children &&
           (pathname === item.href.split("?")[0] ||

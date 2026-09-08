@@ -100,6 +100,7 @@ const INTERNAL_MATRIX: Record<InternalRole, Permission[]> = {
   ],
   SUPPORT_AGENT: [
     "org.viewAll",
+    "reports.view",
     "ticket.viewAll",
     "ticket.create",
     "ticket.changeStatus",

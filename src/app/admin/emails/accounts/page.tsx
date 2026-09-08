@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { requirePermission } from "@/server/auth/context";
+import { guardPage, requirePermission } from "@/server/auth/context";
 import { listEmailAccounts } from "@/server/services/email-account";
 import { prisma } from "@/server/db/client";
 import { features } from "@/lib/env";
@@ -24,7 +24,7 @@ export default async function EmailAccountsPage({
 }: {
   searchParams: Promise<{ error?: string; connected?: string }>;
 }) {
-  await requirePermission("email.account.manage");
+  await guardPage(() => requirePermission("email.account.manage"));
   const sp = await searchParams;
 
   const [accounts, organizations, teams] = await Promise.all([

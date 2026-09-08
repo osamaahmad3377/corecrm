@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import type { InternalRole } from "@prisma/client";
 import { auth } from "./index";
 import { AuthContext, can, hasInternalRank, Permission } from "./rbac";
-import { forbidden, unauthorized } from "@/lib/errors";
+import { AppError, forbidden, unauthorized } from "@/lib/errors";
 
 /**
  * Resolve the acting user from the session. Organization access is derived here
@@ -72,6 +72,26 @@ export async function requireOrgAccess(
     throw forbidden();
   }
   return ctx;
+}
+
+/**
+ * Run a page-level guard; if it fails with a 401/403, render the app's 404 page
+ * instead of a 500 (and don't reveal that the resource exists). Use in page
+ * components: `const ctx = await guardPage(() => requirePermission("org.create"));`
+ */
+export async function guardPage<T>(fn: () => Promise<T>): Promise<T> {
+  const { notFound: nextNotFound } = await import("next/navigation");
+  try {
+    return await fn();
+  } catch (e) {
+    if (
+      e instanceof AppError &&
+      (e.code === "FORBIDDEN" || e.code === "UNAUTHENTICATED")
+    ) {
+      nextNotFound();
+    }
+    throw e;
+  }
 }
 
 /** Client IP + UA for audit logging. Best-effort behind Vercel's proxy. */
