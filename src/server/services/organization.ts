@@ -12,10 +12,16 @@ type Meta = { ipAddress?: string | null; userAgent?: string | null };
 
 function clean(input: OrganizationInput) {
   const empty = (v?: string) => (v && v.trim() !== "" ? v.trim() : null);
+  const parseDate = (v?: string) => {
+    if (!v || v.trim() === "") return undefined;
+    const d = new Date(v);
+    return isNaN(d.getTime()) ? undefined : d;
+  };
   return {
     name: input.name.trim(),
     legalName: empty(input.legalName),
     website: empty(input.website),
+    sharepointUrl: empty(input.sharepointUrl),
     industry: empty(input.industry),
     addressLine1: empty(input.addressLine1),
     addressLine2: empty(input.addressLine2),
@@ -23,9 +29,14 @@ function clean(input: OrganizationInput) {
     state: empty(input.state),
     country: empty(input.country),
     postalCode: empty(input.postalCode),
+    location: empty(input.location),
+    businessHours: empty(input.businessHours),
     mainPhone: empty(input.mainPhone),
     mainEmail: empty(input.mainEmail),
     accountManagerId: empty(input.accountManagerId),
+    ...(parseDate(input.onboardingDate)
+      ? { onboardingDate: parseDate(input.onboardingDate) }
+      : {}),
     notes: empty(input.notes),
   };
 }
@@ -186,6 +197,68 @@ export async function setOrganizationStatus(
     actorUserId: ctx.userId,
     ipAddress: meta?.ipAddress,
     userAgent: meta?.userAgent,
+  });
+}
+
+/**
+ * HARD delete an organization and everything under it — contacts, tickets,
+ * conversations, attachments, assets, invitations, SLA policies, email threads.
+ * Client users that belong only to this org are also removed. Irreversible.
+ */
+export async function deleteOrganization(
+  ctx: AuthContext,
+  id: string,
+  confirmName: string,
+  meta?: Meta,
+) {
+  const org = await prisma.organization.findUnique({
+    where: { id },
+    select: { id: true, name: true },
+  });
+  if (!org) throw notFound("Organization not found");
+  if (confirmName.trim() !== org.name) {
+    throw conflict("The name you typed doesn't match. Deletion cancelled.");
+  }
+
+  // Client users whose ONLY organization link is this one.
+  const links = await prisma.organizationUser.findMany({
+    where: { organizationId: id },
+    select: { userId: true },
+  });
+  const userIds = links.map((l) => l.userId);
+  const orphanUserIds: string[] = [];
+  for (const uid of userIds) {
+    const count = await prisma.organizationUser.count({ where: { userId: uid } });
+    if (count === 1) orphanUserIds.push(uid);
+  }
+
+  await prisma.$transaction(async (tx) => {
+    // Detached email threads/messages first (they SetNull, we want them gone).
+    await tx.emailMessage.deleteMany({ where: { organizationId: id } });
+    await tx.emailThread.deleteMany({ where: { organizationId: id } });
+    // Organization cascade removes contacts, tickets (→ messages/activities/
+    // attachments/assignments/tags), assets, invitations, SLA policies, settings,
+    // OrganizationUser links.
+    await tx.organization.delete({ where: { id } });
+    if (orphanUserIds.length) {
+      await tx.user.deleteMany({
+        where: { id: { in: orphanUserIds }, isInternal: false },
+      });
+    }
+  });
+
+  await recordAudit({
+    action: "ORGANIZATION_DISABLED",
+    entityType: "organization",
+    entityId: id,
+    actorUserId: ctx.userId,
+    ipAddress: meta?.ipAddress,
+    userAgent: meta?.userAgent,
+    metadata: {
+      hardDeleted: true,
+      name: org.name,
+      removedUsers: orphanUserIds.length,
+    },
   });
 }
 

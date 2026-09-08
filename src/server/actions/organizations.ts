@@ -8,6 +8,7 @@ import {
   organizationInputSchema,
 } from "@/validators/organization";
 import {
+  deleteOrganization,
   onboardOrganization,
   setOrganizationStatus,
   updateOrganization,
@@ -18,6 +19,7 @@ function readOrgFields(fd: FormData) {
     name: fd.get("name") ?? "",
     legalName: fd.get("legalName") ?? "",
     website: fd.get("website") ?? "",
+    sharepointUrl: fd.get("sharepointUrl") ?? "",
     industry: fd.get("industry") ?? "",
     addressLine1: fd.get("addressLine1") ?? "",
     addressLine2: fd.get("addressLine2") ?? "",
@@ -25,9 +27,12 @@ function readOrgFields(fd: FormData) {
     state: fd.get("state") ?? "",
     country: fd.get("country") ?? "",
     postalCode: fd.get("postalCode") ?? "",
+    location: fd.get("location") ?? "",
+    businessHours: fd.get("businessHours") ?? "",
     mainPhone: fd.get("mainPhone") ?? "",
     mainEmail: fd.get("mainEmail") ?? "",
     accountManagerId: fd.get("accountManagerId") ?? "",
+    onboardingDate: fd.get("onboardingDate") ?? "",
     notes: fd.get("notes") ?? "",
   };
 }
@@ -117,4 +122,18 @@ export async function setOrganizationStatusAction(
       revalidate: [`/admin/organizations/${id}`, "/admin/organizations"],
     };
   });
+}
+
+export async function deleteOrganizationAction(
+  id: string,
+  confirmName: string,
+): Promise<ActionState> {
+  const ctx = await requirePermission("org.delete");
+  const result = await runAction(async () => {
+    const meta = await requestMeta();
+    await deleteOrganization(ctx, id, confirmName, meta);
+    return { revalidate: ["/admin/organizations", "/admin"] };
+  });
+  if (result.ok) redirect("/admin/organizations");
+  return result;
 }

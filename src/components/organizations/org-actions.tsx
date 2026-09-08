@@ -11,7 +11,14 @@ import {
   resendInvitationAction,
   revokeInvitationAction,
 } from "@/server/actions/users";
-import { setOrganizationStatusAction } from "@/server/actions/organizations";
+import {
+  deleteOrganizationAction,
+  setOrganizationStatusAction,
+} from "@/server/actions/organizations";
+import { impersonateOrgAction } from "@/server/actions/impersonation";
+import { Input } from "@/components/ui/input";
+import { Eye } from "lucide-react";
+import { useState } from "react";
 import { deleteContactAction } from "@/server/actions/contacts";
 import { deleteAssetAction } from "@/server/actions/assets";
 import {
@@ -57,6 +64,81 @@ export function OrgStatusToggle({
         return { ok: false, error: res.error };
       }}
     />
+  );
+}
+
+export function ViewAsClientButton({ organizationId }: { organizationId: string }) {
+  const [pending, start] = useTransition();
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={pending}
+      onClick={() => start(() => impersonateOrgAction(organizationId))}
+    >
+      <Eye className="size-4" /> {pending ? "Opening…" : "View as client"}
+    </Button>
+  );
+}
+
+export function DeleteOrgButton({
+  id,
+  name,
+}: {
+  id: string;
+  name: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState("");
+  const [pending, start] = useTransition();
+
+  return (
+    <>
+      <Button variant="destructive" size="sm" onClick={() => setOpen(true)}>
+        <Trash2 className="size-4" /> Delete
+      </Button>
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-lg border bg-background p-5 shadow-lg">
+            <h2 className="text-base font-semibold text-destructive">
+              Delete {name}?
+            </h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              This permanently removes the organization and{" "}
+              <strong>every ticket, conversation, contact, asset and email
+              thread</strong> under it. Client users belonging only to this
+              organization are also deleted. This cannot be undone.
+            </p>
+            <p className="mt-3 text-sm">
+              Type <strong>{name}</strong> to confirm:
+            </p>
+            <Input
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              className="mt-1.5"
+              autoFocus
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={pending || value !== name}
+                onClick={() =>
+                  start(async () => {
+                    const res = await deleteOrganizationAction(id, value);
+                    if (!res.ok) toast.error(res.error);
+                  })
+                }
+              >
+                {pending ? "Deleting…" : "Delete permanently"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

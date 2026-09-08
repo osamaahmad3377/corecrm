@@ -15,14 +15,18 @@ interface Org {
   name: string;
   legalName: string | null;
   website: string | null;
+  sharepointUrl: string | null;
   industry: string | null;
   addressLine1: string | null;
   city: string | null;
   state: string | null;
   country: string | null;
   postalCode: string | null;
+  location: string | null;
+  businessHours: string | null;
   mainPhone: string | null;
   mainEmail: string | null;
+  onboardingDate: string | Date;
   notes: string | null;
 }
 
@@ -63,10 +67,21 @@ export function EditOrgForm({ org }: { org: Org }) {
 
   return (
     <form action={formAction} className="grid gap-4 sm:grid-cols-2">
-      <F name="name" label="Organization name" defaultValue={org.name} />
+      <F name="name" label="Name of organisation" defaultValue={org.name} />
       <F name="legalName" label="Legal name" defaultValue={org.legalName} />
-      <F name="website" label="Website" defaultValue={org.website} />
+      <F name="mainEmail" label="Org email" type="email" defaultValue={org.mainEmail} />
+      <F name="mainPhone" label="Contact number" defaultValue={org.mainPhone} />
+      <F name="businessHours" label="Business hours" defaultValue={org.businessHours} />
+      <F name="location" label="Location" defaultValue={org.location} />
+      <F
+        name="onboardingDate"
+        label="Onboarding date"
+        type="date"
+        defaultValue={new Date(org.onboardingDate).toISOString().slice(0, 10)}
+      />
       <F name="industry" label="Industry" defaultValue={org.industry} />
+      <F name="website" label="Website link" defaultValue={org.website} />
+      <F name="sharepointUrl" label="SharePoint link" defaultValue={org.sharepointUrl} />
       <F
         name="addressLine1"
         label="Address"
@@ -77,13 +92,6 @@ export function EditOrgForm({ org }: { org: Org }) {
       <F name="state" label="State / Region" defaultValue={org.state} />
       <F name="country" label="Country" defaultValue={org.country} />
       <F name="postalCode" label="Postal code" defaultValue={org.postalCode} />
-      <F name="mainPhone" label="Main phone" defaultValue={org.mainPhone} />
-      <F
-        name="mainEmail"
-        label="Main email"
-        type="email"
-        defaultValue={org.mainEmail}
-      />
       <div className="space-y-2 sm:col-span-2">
         <Label htmlFor="e-notes">Notes</Label>
         <Textarea

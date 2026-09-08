@@ -13,6 +13,7 @@
  */
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { SYSTEM_TEMPLATES } from "../src/server/email-templates/registry";
 
 const prisma = new PrismaClient();
 
@@ -132,6 +133,22 @@ async function main() {
     await prisma.tag.upsert({ where: { name }, create: { name }, update: {} });
   }
 
+  // --- Email templates (built-in) ---
+  for (const def of SYSTEM_TEMPLATES) {
+    await prisma.emailTemplate.upsert({
+      where: { key: def.key },
+      create: {
+        key: def.key,
+        name: def.name,
+        description: def.description,
+        subject: def.subject,
+        bodyHtml: def.body,
+        isSystem: true,
+      },
+      update: {},
+    });
+  }
+
   // --- Internal users ---
   const internal = [
     { email: "superadmin@corecrm.dev", name: "Alex Super", role: "SUPER_ADMIN" as const },
@@ -182,12 +199,16 @@ async function main() {
         name: "ABC Manufacturing Pty Ltd",
         legalName: "ABC Manufacturing Proprietary Limited",
         website: "https://abc-manufacturing.example.com",
+        sharepointUrl: "https://example.sharepoint.com/sites/abc-manufacturing",
         industry: "Manufacturing",
         addressLine1: "12 Industrial Way",
         city: "Newcastle",
         state: "NSW",
         country: "Australia",
         postalCode: "2300",
+        location: "Newcastle, NSW",
+        businessHours: "Mon–Fri 07:00–17:00 AEST",
+        onboardingDate: new Date("2026-02-01T00:00:00Z"),
         mainPhone: "+61 2 4900 0000",
         mainEmail: "it@abc-manufacturing.example.com",
         accountManagerId: staff["SUPPORT_MANAGER"].id,

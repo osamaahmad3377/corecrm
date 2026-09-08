@@ -35,6 +35,8 @@ import {
   InvitationActions,
   DeleteContactButton,
   DeleteAssetButton,
+  DeleteOrgButton,
+  ViewAsClientButton,
 } from "@/components/organizations/org-actions";
 import { formatDate, formatRelative, formatDuration } from "@/lib/format";
 import { Pencil, Plus } from "lucide-react";
@@ -57,6 +59,14 @@ export default async function OrganizationDetailPage({
   }
   const { org, stats } = data;
   const canManage = can(ctx, "org.update");
+  const canDelete = can(ctx, "org.delete");
+  const canImpersonate = can(ctx, "org.impersonate");
+  const primaryContact = data.org
+    ? await prisma.contact.findFirst({
+        where: { organizationId, isPrimary: true },
+        select: { firstName: true, lastName: true },
+      })
+    : null;
 
   const [contacts, users, invitations, tickets, assets, activity] =
     await Promise.all([
@@ -111,9 +121,74 @@ export default async function OrganizationDetailPage({
           .filter(Boolean)
           .join(" · ")}
         actions={
-          canManage && <OrgStatusToggle id={org.id} status={org.status} />
+          <>
+            {canImpersonate && <ViewAsClientButton organizationId={org.id} />}
+            {canManage && <OrgStatusToggle id={org.id} status={org.status} />}
+            {canDelete && <DeleteOrgButton id={org.id} name={org.name} />}
+          </>
         }
       />
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-sm">Client KPIs</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+          <Kpi
+            label="Client name"
+            value={
+              primaryContact
+                ? `${primaryContact.firstName} ${primaryContact.lastName}`
+                : "—"
+            }
+          />
+          <Kpi label="Organization" value={org.name} />
+          <Kpi
+            label="Onboarding date"
+            value={formatDate(org.onboardingDate, ctx.timezone)}
+          />
+          <Kpi label="Account manager" value={org.accountManager?.name ?? "—"} />
+          <Kpi label="Total tickets raised" value={String(stats.totalTickets)} />
+          <Kpi
+            label="Total tickets closed"
+            value={String(stats.resolvedTickets)}
+          />
+          <Kpi
+            label="Website"
+            value={
+              org.website ? (
+                <a
+                  href={org.website}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  Open
+                </a>
+              ) : (
+                "—"
+              )
+            }
+          />
+          <Kpi
+            label="SharePoint"
+            value={
+              org.sharepointUrl ? (
+                <a
+                  href={org.sharepointUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  Open
+                </a>
+              ) : (
+                "—"
+              )
+            }
+          />
+        </CardContent>
+      </Card>
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard label="Total tickets" value={stats.totalTickets} />
@@ -170,8 +245,25 @@ export default async function OrganizationDetailPage({
                     ) : null
                   }
                 />
-                <Row label="Main phone" value={org.mainPhone} />
-                <Row label="Main email" value={org.mainEmail} />
+                <Row label="Contact number" value={org.mainPhone} />
+                <Row label="Org email" value={org.mainEmail} />
+                <Row label="Business hours" value={org.businessHours} />
+                <Row label="Location" value={org.location} />
+                <Row
+                  label="SharePoint"
+                  value={
+                    org.sharepointUrl ? (
+                      <a
+                        href={org.sharepointUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline"
+                      >
+                        {org.sharepointUrl}
+                      </a>
+                    ) : null
+                  }
+                />
                 <Row
                   label="Address"
                   value={[
@@ -543,6 +635,21 @@ function Row({
     <div className="flex items-start justify-between gap-3">
       <span className="shrink-0 text-muted-foreground">{label}</span>
       <span className="text-right">{value}</span>
+    </div>
+  );
+}
+
+function Kpi({
+  label,
+  value,
+}: {
+  label: string;
+  value: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-md border p-2.5">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="mt-0.5 font-medium">{value}</p>
     </div>
   );
 }

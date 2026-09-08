@@ -48,17 +48,26 @@ export function OnboardForm() {
           <CardTitle className="text-sm">Organization information</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
-          <Field name="name" label="Organization name" required />
+          <Field name="name" label="Name of organisation" required />
           <Field name="legalName" label="Legal name" />
-          <Field name="website" label="Website" placeholder="https://" />
+          <Field name="mainEmail" label="Org email" type="email" required />
+          <Field name="mainPhone" label="Contact number" required />
+          <Field name="businessHours" label="Business hours" placeholder="e.g. Mon–Fri 9:00–17:00 AEST" />
+          <Field name="location" label="Location" placeholder="e.g. Newcastle, NSW" />
+          <Field
+            name="onboardingDate"
+            label="Onboarding date"
+            type="date"
+            defaultValue={new Date().toISOString().slice(0, 10)}
+          />
           <Field name="industry" label="Industry" />
+          <Field name="website" label="Website link (optional)" placeholder="https://" />
+          <Field name="sharepointUrl" label="SharePoint link (optional)" placeholder="https://" />
           <Field name="addressLine1" label="Address" className="sm:col-span-2" />
           <Field name="city" label="City" />
           <Field name="state" label="State / Region" />
           <Field name="country" label="Country" />
           <Field name="postalCode" label="Postal code" />
-          <Field name="mainPhone" label="Main phone" />
-          <Field name="mainEmail" label="Main email" type="email" />
           <div className="space-y-2 sm:col-span-2">
             <Label htmlFor="notes">Notes</Label>
             <Textarea id="notes" name="notes" rows={3} />
@@ -95,6 +104,7 @@ function Field({
   required,
   placeholder,
   className,
+  defaultValue,
 }: {
   name: string;
   label: string;
@@ -102,6 +112,7 @@ function Field({
   required?: boolean;
   placeholder?: string;
   className?: string;
+  defaultValue?: string;
 }) {
   return (
     <div className={`space-y-2 ${className ?? ""}`}>
@@ -115,6 +126,7 @@ function Field({
         type={type}
         required={required}
         placeholder={placeholder}
+        defaultValue={defaultValue}
       />
     </div>
   );
