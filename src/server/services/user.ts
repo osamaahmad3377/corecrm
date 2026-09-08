@@ -8,7 +8,8 @@ import { randomToken, sha256 } from "@/lib/crypto";
 import { hashPassword, passwordIssues, verifyPassword } from "@/server/auth/password";
 import { PASSWORD_RESET_TTL_MINUTES } from "@/lib/constants";
 import { sendTransactionalEmail } from "@/server/mailer";
-import { passwordResetEmail, appUrl } from "@/server/email-templates";
+import { appUrl } from "@/server/email-templates";
+import { renderTemplate } from "./email-template";
 import { logger } from "@/lib/logger";
 
 type Meta = { ipAddress?: string | null; userAgent?: string | null };
@@ -186,6 +187,32 @@ export async function changeOwnPassword(
 
 // --- Password reset (self-service) ---------------------------------------
 
+/**
+ * Admin-initiated password reset — sends the same self-service reset email to a
+ * user. Works for internal staff and client users alike.
+ */
+export async function adminSendPasswordReset(
+  ctx: AuthContext,
+  userId: string,
+  meta?: Meta,
+) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, email: true, status: true },
+  });
+  if (!user) throw notFound("User not found");
+  await requestPasswordReset(user.email);
+  await recordAudit({
+    action: "USER_PASSWORD_CHANGED",
+    entityType: "user",
+    entityId: userId,
+    actorUserId: ctx.userId,
+    ipAddress: meta?.ipAddress,
+    userAgent: meta?.userAgent,
+    metadata: { via: "admin_reset_email", email: user.email },
+  });
+}
+
 export async function requestPasswordReset(email: string) {
   const user = await prisma.user.findUnique({
     where: { email: email.toLowerCase().trim() },
@@ -212,7 +239,7 @@ export async function requestPasswordReset(email: string) {
   });
 
   const url = `${appUrl()}/reset-password?token=${token}`;
-  const tpl = passwordResetEmail({
+  const tpl = await renderTemplate("PASSWORD_RESET", {
     name: user.name,
     resetUrl: url,
     expiresMinutes: PASSWORD_RESET_TTL_MINUTES,

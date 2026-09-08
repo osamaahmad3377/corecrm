@@ -3,13 +3,8 @@ import type { NotificationType } from "@prisma/client";
 import { prisma } from "@/server/db/client";
 import { logger } from "@/lib/logger";
 import { sendTransactionalEmail } from "@/server/mailer";
-import {
-  appUrl,
-  ticketAssignedEmail,
-  ticketCreatedEmail,
-  ticketReplyEmail,
-  ticketResolvedEmail,
-} from "@/server/email-templates";
+import { appUrl } from "@/server/email-templates";
+import { renderTemplate } from "./email-template";
 import { snippet } from "@/lib/sanitize";
 
 /**
@@ -93,12 +88,12 @@ export const notificationService = {
           where: { id: userId },
           select: { name: true },
         });
-        const tpl = ticketCreatedEmail({
+        const tpl = await renderTemplate("TICKET_CREATED_INTERNAL", {
           recipientName: user?.name ?? "there",
           ticketNumber: opts.ticket.ticketNumber,
           subject: opts.ticket.subject,
           url: adminTicketUrl(opts.ticket.id),
-          forClient: false,
+          requesterName: opts.requesterName,
         });
         return deliver({
           userId,
@@ -123,12 +118,11 @@ export const notificationService = {
       where: { id: opts.clientUserId },
       select: { name: true },
     });
-    const tpl = ticketCreatedEmail({
+    const tpl = await renderTemplate("TICKET_CREATED_CLIENT", {
       recipientName: user?.name ?? "there",
       ticketNumber: opts.ticket.ticketNumber,
       subject: opts.ticket.subject,
       url: portalTicketUrl(opts.ticket.id),
-      forClient: true,
     });
     await deliver({
       userId: opts.clientUserId,
@@ -148,7 +142,7 @@ export const notificationService = {
       where: { id: opts.agentUserId },
       select: { name: true },
     });
-    const tpl = ticketAssignedEmail({
+    const tpl = await renderTemplate("TICKET_ASSIGNED", {
       agentName: user?.name ?? "there",
       ticketNumber: opts.ticket.ticketNumber,
       subject: opts.ticket.subject,
@@ -182,7 +176,7 @@ export const notificationService = {
           select: { name: true },
         });
         const isClient = opts.audience === "CLIENT";
-        const tpl = ticketReplyEmail({
+        const tpl = await renderTemplate("TICKET_REPLY", {
           recipientName: user?.name ?? "there",
           ticketNumber: opts.ticket.ticketNumber,
           subject: opts.ticket.subject,
@@ -239,7 +233,7 @@ export const notificationService = {
       where: { id: opts.clientUserId },
       select: { name: true },
     });
-    const tpl = ticketResolvedEmail({
+    const tpl = await renderTemplate("TICKET_RESOLVED", {
       recipientName: user?.name ?? "there",
       ticketNumber: opts.ticket.ticketNumber,
       subject: opts.ticket.subject,

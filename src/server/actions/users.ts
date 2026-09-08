@@ -8,6 +8,7 @@ import {
 } from "@/validators/user";
 import { createInvitation, resendInvitation, revokeInvitation } from "@/server/services/invitation";
 import {
+  adminSendPasswordReset,
   changeClientRole,
   changeInternalRole,
   changeOwnPassword,
@@ -191,6 +192,17 @@ export async function updateProfileAction(
       message: "Profile updated. Sign out and back in to refresh your session.",
       revalidate: ["/admin/settings/profile", "/portal/profile"],
     };
+  });
+}
+
+export async function adminResetPasswordAction(
+  userId: string,
+): Promise<ActionState> {
+  const ctx = await requirePermission("user.resetPassword");
+  return runAction(async () => {
+    const meta = await requestMeta();
+    await adminSendPasswordReset(ctx, userId, meta);
+    return { message: "Password reset email sent" };
   });
 }
 

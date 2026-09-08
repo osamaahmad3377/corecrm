@@ -2,10 +2,10 @@ import type { Metadata } from "next";
 import { guardPage, requireInternal } from "@/server/auth/context";
 import { can } from "@/server/auth/rbac";
 import { listInternalUsers } from "@/server/services/user";
+import { listTeams } from "@/server/services/team";
 import { prisma } from "@/server/db/client";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { EmptyState } from "@/components/states";
 import { ToneBadge, UserAvatar } from "@/components/badges";
 import {
   Table,
@@ -19,8 +19,10 @@ import { InviteUserDialog } from "@/components/users/invite-user-dialog";
 import {
   InternalRoleSelect,
   InternalStatusToggle,
+  ResetPasswordButton,
 } from "@/components/users/internal-user-controls";
 import { InvitationActions } from "@/components/organizations/org-actions";
+import { TeamManager } from "@/components/teams/team-manager";
 import { ROLE_LABELS } from "@/server/auth/rbac";
 import { formatRelative } from "@/lib/format";
 
@@ -29,19 +31,20 @@ export const metadata: Metadata = { title: "Team" };
 export default async function TeamPage() {
   const ctx = await guardPage(() => requireInternal("SUPPORT_MANAGER"));
   const manageUsers = can(ctx, "internal.users.manage");
+  const manageTeams = can(ctx, "team.manage");
+  const canResetPw = can(ctx, "user.resetPassword");
 
-  const [users, teams, invitations] = await Promise.all([
+  const [users, teams, invitations, activeStaff] = await Promise.all([
     listInternalUsers({}),
-    prisma.team.findMany({
-      orderBy: { name: "asc" },
-      include: {
-        _count: { select: { members: true, tickets: true } },
-        members: { include: { user: { select: { name: true } } } },
-      },
-    }),
+    listTeams(),
     prisma.invitation.findMany({
       where: { status: "PENDING", internalRole: { not: null } },
       orderBy: { createdAt: "desc" },
+    }),
+    prisma.user.findMany({
+      where: { isInternal: true, status: "ACTIVE" },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
     }),
   ]);
 
@@ -66,9 +69,9 @@ export default async function TeamPage() {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Role</TableHead>
-                  <TableHead>Assigned tickets</TableHead>
+                  <TableHead>Assigned</TableHead>
                   <TableHead>Last login</TableHead>
-                  {manageUsers && <TableHead />}
+                  {(manageUsers || canResetPw) && <TableHead />}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -96,9 +99,7 @@ export default async function TeamPage() {
                         />
                       ) : (
                         <span className="text-sm">
-                          {u.internalRole
-                            ? ROLE_LABELS[u.internalRole]
-                            : "—"}
+                          {u.internalRole ? ROLE_LABELS[u.internalRole] : "—"}
                         </span>
                       )}
                     </TableCell>
@@ -108,14 +109,19 @@ export default async function TeamPage() {
                     <TableCell className="text-sm text-muted-foreground">
                       {u.lastLoginAt ? formatRelative(u.lastLoginAt) : "Never"}
                     </TableCell>
-                    {manageUsers && (
+                    {(manageUsers || canResetPw) && (
                       <TableCell className="text-right">
-                        {u.id !== ctx.userId && (
-                          <InternalStatusToggle
-                            userId={u.id}
-                            status={u.status}
-                          />
-                        )}
+                        <div className="flex justify-end gap-1">
+                          {canResetPw && u.id !== ctx.userId && (
+                            <ResetPasswordButton userId={u.id} />
+                          )}
+                          {manageUsers && u.id !== ctx.userId && (
+                            <InternalStatusToggle
+                              userId={u.id}
+                              status={u.status}
+                            />
+                          )}
+                        </div>
                       </TableCell>
                     )}
                   </TableRow>
@@ -153,32 +159,9 @@ export default async function TeamPage() {
         </Card>
       )}
 
-      <Card className="mt-4">
-        <CardHeader>
-          <CardTitle className="text-sm">Support teams</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {teams.length === 0 ? (
-            <EmptyState title="No teams yet" description="Teams can be created from Settings." />
-          ) : (
-            <ul className="divide-y">
-              {teams.map((t) => (
-                <li key={t.id} className="flex items-center justify-between py-2">
-                  <div>
-                    <p className="text-sm font-medium">{t.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {t.members.map((m) => m.user.name).join(", ") || "No members"}
-                    </p>
-                  </div>
-                  <span className="text-xs text-muted-foreground">
-                    {t._count.members} members · {t._count.tickets} tickets
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
+      <div className="mt-4">
+        <TeamManager teams={teams} staff={activeStaff} canManage={manageTeams} />
+      </div>
     </>
   );
 }

@@ -9,6 +9,8 @@ const ALL = [
   { label: "Categories", href: "/admin/settings/categories" },
   { label: "Priorities", href: "/admin/settings/priorities" },
   { label: "SLA", href: "/admin/settings/sla" },
+  { label: "Email", href: "/admin/settings/email", adminOnly: true },
+  { label: "Templates", href: "/admin/settings/templates", adminOnly: true },
   { label: "Security", href: "/admin/settings/security", adminOnly: true },
   { label: "Profile", href: "/admin/settings/profile" },
 ];

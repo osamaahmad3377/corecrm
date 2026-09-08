@@ -12,7 +12,7 @@ interface Template {
   text: string;
 }
 
-function layout(opts: {
+export function layout(opts: {
   heading: string;
   bodyHtml: string;
   bodyText: string;

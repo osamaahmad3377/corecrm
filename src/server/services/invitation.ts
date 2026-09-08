@@ -7,7 +7,8 @@ import { hashPassword, passwordIssues } from "@/server/auth/password";
 import { INVITATION_TTL_HOURS } from "@/lib/constants";
 import { recordAudit } from "./audit";
 import { sendTransactionalEmail } from "@/server/mailer";
-import { invitationEmail, appUrl } from "@/server/email-templates";
+import { appUrl } from "@/server/email-templates";
+import { renderTemplate } from "./email-template";
 import { logger } from "@/lib/logger";
 
 interface CreateInvitationArgs {
@@ -120,10 +121,12 @@ export async function createInvitation(args: CreateInvitationArgs) {
     where: { id: args.invitedById },
     select: { name: true },
   });
-  const tpl = invitationEmail({
+  const tpl = await renderTemplate("INVITATION", {
     name: invitation.name,
     inviterName: inviter?.name ?? "The support team",
-    organizationName: invitation.organization?.name ?? null,
+    context: invitation.organization?.name
+      ? `the ${invitation.organization.name} client portal`
+      : "the support console",
     acceptUrl,
     expiresHours: INVITATION_TTL_HOURS,
   });
@@ -178,10 +181,12 @@ export async function resendInvitation(
     where: { id: actorUserId },
     select: { name: true },
   });
-  const tpl = invitationEmail({
+  const tpl = await renderTemplate("INVITATION", {
     name: inv.name,
     inviterName: inviter?.name ?? "The support team",
-    organizationName: inv.organization?.name ?? null,
+    context: inv.organization?.name
+      ? `the ${inv.organization.name} client portal`
+      : "the support console",
     acceptUrl,
     expiresHours: INVITATION_TTL_HOURS,
   });

@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import {
+  adminResetPasswordAction,
   changeInternalRoleAction,
   setInternalUserStatusAction,
 } from "@/server/actions/users";
@@ -51,6 +52,32 @@ export function InternalRoleSelect({
         <SelectItem value="SUPER_ADMIN">Super Admin</SelectItem>
       </SelectContent>
     </Select>
+  );
+}
+
+export function ResetPasswordButton({
+  userId,
+  label = "Send reset",
+}: {
+  userId: string;
+  label?: string;
+}) {
+  const [pending, start] = useTransition();
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      disabled={pending}
+      onClick={() =>
+        start(async () => {
+          const res = await adminResetPasswordAction(userId);
+          if (res.ok) toast.success(res.message ?? "Reset email sent");
+          else toast.error(res.error);
+        })
+      }
+    >
+      {pending ? "Sending…" : label}
+    </Button>
   );
 }
 
