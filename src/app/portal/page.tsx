@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { requireAuth } from "@/server/auth/context";
+import { requirePortalAuth } from "@/server/auth/context";
 import { clientDashboardStats, listTickets } from "@/server/services/ticket";
 import { prisma } from "@/server/db/client";
 import { PageHeader } from "@/components/page-header";
@@ -16,7 +16,7 @@ import { Plus, Inbox, Clock, CheckCircle2, Archive } from "lucide-react";
 export const metadata: Metadata = { title: "Dashboard" };
 
 export default async function PortalDashboard() {
-  const ctx = await requireAuth();
+  const ctx = await requirePortalAuth();
   const [stats, recent, activity] = await Promise.all([
     clientDashboardStats(ctx),
     listTickets(ctx, { page: 1, pageSize: 25, sort: "newest" } as never),

@@ -948,6 +948,51 @@ export async function changePriority(
   });
 }
 
+export async function setTicketDueDate(
+  ctx: AuthContext,
+  ticketId: string,
+  dueAtIso: string | null,
+  meta?: Meta,
+) {
+  if (!can(ctx, "ticket.setDueDate")) throw forbidden();
+  const ticket = await prisma.ticket.findUnique({
+    where: { id: ticketId },
+    select: { id: true, ticketNumber: true, dueAt: true },
+  });
+  if (!ticket) throw notFound("Ticket not found");
+
+  let dueAt: Date | null = null;
+  if (dueAtIso) {
+    const d = new Date(dueAtIso);
+    if (isNaN(d.getTime())) throw validationError("Invalid date");
+    dueAt = d;
+  }
+
+  await prisma.$transaction([
+    prisma.ticket.update({ where: { id: ticketId }, data: { dueAt } }),
+    prisma.ticketActivity.create({
+      data: {
+        ticketId,
+        actorUserId: ctx.userId,
+        type: "STATUS_CHANGED",
+        fromValue: ticket.dueAt ? ticket.dueAt.toISOString() : null,
+        toValue: dueAt ? dueAt.toISOString() : "cleared",
+        metadata: { field: "dueAt" },
+      },
+    }),
+  ]);
+
+  await recordAudit({
+    action: "TICKET_UPDATED",
+    entityType: "ticket",
+    entityId: ticketId,
+    actorUserId: ctx.userId,
+    ipAddress: meta?.ipAddress,
+    userAgent: meta?.userAgent,
+    metadata: { ticketNumber: ticket.ticketNumber, dueAt: dueAt?.toISOString() ?? null },
+  });
+}
+
 // ---------------------------------------------------------------------------
 //  Dashboard aggregates
 // ---------------------------------------------------------------------------
@@ -1061,6 +1106,134 @@ export async function ticketChartData() {
     })),
     overTime,
   };
+}
+
+// ---------------------------------------------------------------------------
+//  Employee ("my tasks") views
+// ---------------------------------------------------------------------------
+
+async function myScopeWhere(ctx: AuthContext): Promise<Prisma.TicketWhereInput> {
+  const teams = await prisma.teamMember.findMany({
+    where: { userId: ctx.userId },
+    select: { teamId: true },
+  });
+  const teamIds = teams.map((t) => t.teamId);
+  return {
+    OR: [
+      { assignedAgentId: ctx.userId },
+      ...(teamIds.length
+        ? [{ assignedTeamId: { in: teamIds }, assignedAgentId: null }]
+        : []),
+    ],
+  };
+}
+
+export async function listMyTasks(
+  ctx: AuthContext,
+  filter: TicketListFilter,
+) {
+  const scope = await myScopeWhere(ctx);
+  const where: Prisma.TicketWhereInput = { AND: [scope] };
+  const and = where.AND as Prisma.TicketWhereInput[];
+
+  if (filter.status === "OPEN_ALL" || !filter.status) {
+    if (filter.view !== "sla-breached" && !filter.status) {
+      and.push({ status: { key: { in: OPEN_STATUS_KEYS } } });
+    }
+  } else {
+    and.push({ status: { key: filter.status } });
+  }
+  if (filter.priority) and.push({ priority: { key: filter.priority } });
+  if (filter.view === "sla-breached") {
+    and.push({
+      OR: [{ responseBreached: true }, { resolutionBreached: true }],
+    });
+  }
+  if (filter.q) {
+    and.push({
+      OR: [
+        { ticketNumber: { contains: filter.q, mode: "insensitive" } },
+        { subject: { contains: filter.q, mode: "insensitive" } },
+        { organization: { name: { contains: filter.q, mode: "insensitive" } } },
+      ],
+    });
+  }
+
+  const pageSize = [25, 50, 100].includes(filter.pageSize) ? filter.pageSize : 25;
+  const page = Math.max(1, filter.page);
+  const orderBy: Prisma.TicketOrderByWithRelationInput =
+    filter.sort === "priority"
+      ? { priority: { order: "desc" } }
+      : filter.sort === "oldest"
+        ? { createdAt: "asc" }
+        : { updatedAt: "desc" };
+
+  const [items, total] = await Promise.all([
+    prisma.ticket.findMany({
+      where,
+      include: ticketListInclude,
+      orderBy,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+    prisma.ticket.count({ where }),
+  ]);
+
+  return {
+    items,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+  };
+}
+
+export async function employeeDashboardStats(ctx: AuthContext) {
+  const scope = await myScopeWhere(ctx);
+  const openScope: Prisma.TicketWhereInput = {
+    AND: [scope, { status: { key: { in: OPEN_STATUS_KEYS } } }],
+  };
+  const [openCount, awaitingResponse, overdue, dueToday, resolvedToday] =
+    await Promise.all([
+      prisma.ticket.count({ where: openScope }),
+      prisma.ticket.count({
+        where: { AND: [scope, { status: { key: "WAITING_FOR_INTERNAL" } }] },
+      }),
+      prisma.ticket.count({
+        where: {
+          AND: [
+            scope,
+            { status: { isTerminal: false } },
+            {
+              OR: [
+                { responseBreached: true },
+                { resolutionBreached: true },
+                { dueAt: { lt: new Date() } },
+              ],
+            },
+          ],
+        },
+      }),
+      prisma.ticket.count({
+        where: {
+          AND: [
+            scope,
+            { status: { isTerminal: false } },
+            { dueAt: { gte: startOfToday(), lt: endOfToday() } },
+          ],
+        },
+      }),
+      prisma.ticket.count({
+        where: { AND: [scope, { resolvedAt: { gte: startOfToday() } }] },
+      }),
+    ]);
+  return { openCount, awaitingResponse, overdue, dueToday, resolvedToday };
+}
+
+function endOfToday() {
+  const d = new Date();
+  d.setUTCHours(23, 59, 59, 999);
+  return d;
 }
 
 export async function clientDashboardStats(ctx: AuthContext) {

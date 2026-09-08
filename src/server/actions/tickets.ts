@@ -18,6 +18,7 @@ import {
   changeStatus,
   createTicketFromPortal,
   createTicketInternal,
+  setTicketDueDate,
 } from "@/server/services/ticket";
 
 export async function createPortalTicketAction(
@@ -186,5 +187,24 @@ export async function changePriorityAction(
     const meta = await requestMeta();
     await changePriority(ctx, ticketId, parsed.data.priorityKey, meta);
     return { revalidate: [`/admin/tickets/${ticketId}`, "/admin/tickets"] };
+  });
+}
+
+export async function setTicketDueDateAction(
+  ticketId: string,
+  dueAtIso: string | null,
+): Promise<ActionState> {
+  const ctx = await requirePermission("ticket.setDueDate");
+  return runAction(async () => {
+    const meta = await requestMeta();
+    await setTicketDueDate(ctx, ticketId, dueAtIso, meta);
+    return {
+      revalidate: [
+        `/admin/tickets/${ticketId}`,
+        `/employee/tasks/${ticketId}`,
+        "/admin/tickets",
+        "/employee/tasks",
+      ],
+    };
   });
 }

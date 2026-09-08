@@ -1,12 +1,9 @@
-import type { Metadata } from "next";
-import { requirePortalAuth } from "@/server/auth/context";
+import { requireInternal } from "@/server/auth/context";
 import { PageHeader } from "@/components/page-header";
 import { ProfileForm } from "@/components/settings/profile-form";
 
-export const metadata: Metadata = { title: "Profile" };
-
-export default async function PortalProfilePage() {
-  const ctx = await requirePortalAuth();
+export default async function EmployeeProfilePage() {
+  const ctx = await requireInternal();
   return (
     <div className="max-w-2xl">
       <PageHeader title="Profile" description="Manage your account details." />

@@ -14,9 +14,15 @@ export interface AuthContext {
   name: string;
   isInternal: boolean;
   internalRole: InternalRole | null;
-  /** Present only for client users — their single organization + role there. */
+  /** Present for client users, or for internal staff currently "viewing as client". */
   organization: { id: string; role: ClientRole } | null;
   timezone: string;
+  /**
+   * Set when internal staff are impersonating a client org via the portal.
+   * In that mode `isInternal` is reported as `false` and `organization` is the
+   * viewed org, so client-facing services scope correctly.
+   */
+  viewingAsClient?: boolean;
 }
 
 export type Permission =
@@ -28,10 +34,14 @@ export type Permission =
   | "org.update"
   | "org.disable"
   | "org.viewAll"
+  | "org.delete"
+  | "org.impersonate" // "view as client" / open the client portal
   | "contact.manage"
   | "asset.manage"
   | "team.manage"
   | "ticketConfig.manage" // categories / priorities / statuses / SLA
+  | "emailTemplate.manage"
+  | "user.resetPassword" // admin-initiated password reset for any user
   | "reports.view"
   // tickets
   | "ticket.viewAll"
@@ -39,12 +49,14 @@ export type Permission =
   | "ticket.assign"
   | "ticket.changeStatus"
   | "ticket.changePriority"
+  | "ticket.setDueDate"
   | "ticket.internalNote"
   | "ticket.viewInternal"
   | "ticket.publicReply"
   // email center
   | "email.account.manage"
   | "email.inbox.view"
+  | "email.triage" // convert to ticket / mark info / ignore
   | "email.send"
   | "email.convertToTicket"
   // client portal
@@ -60,41 +72,51 @@ const INTERNAL_MATRIX: Record<InternalRole, Permission[]> = {
     "org.create",
     "org.update",
     "org.disable",
+    "org.delete",
+    "org.impersonate",
     "org.viewAll",
     "contact.manage",
     "asset.manage",
     "team.manage",
     "ticketConfig.manage",
+    "emailTemplate.manage",
+    "user.resetPassword",
     "reports.view",
     "ticket.viewAll",
     "ticket.create",
     "ticket.assign",
     "ticket.changeStatus",
     "ticket.changePriority",
+    "ticket.setDueDate",
     "ticket.internalNote",
     "ticket.viewInternal",
     "ticket.publicReply",
     "email.account.manage",
     "email.inbox.view",
+    "email.triage",
     "email.send",
     "email.convertToTicket",
   ],
   SUPPORT_MANAGER: [
     "org.viewAll",
+    "org.impersonate",
     "contact.manage",
     "asset.manage",
     "team.manage",
     "ticketConfig.manage",
+    "user.resetPassword",
     "reports.view",
     "ticket.viewAll",
     "ticket.create",
     "ticket.assign",
     "ticket.changeStatus",
     "ticket.changePriority",
+    "ticket.setDueDate",
     "ticket.internalNote",
     "ticket.viewInternal",
     "ticket.publicReply",
     "email.inbox.view",
+    "email.triage",
     "email.send",
     "email.convertToTicket",
   ],
@@ -105,10 +127,12 @@ const INTERNAL_MATRIX: Record<InternalRole, Permission[]> = {
     "ticket.create",
     "ticket.changeStatus",
     "ticket.changePriority",
+    "ticket.setDueDate",
     "ticket.internalNote",
     "ticket.viewInternal",
     "ticket.publicReply",
     "email.inbox.view",
+    "email.triage",
     "email.send",
     "email.convertToTicket",
   ],

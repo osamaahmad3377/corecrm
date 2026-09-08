@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { requireAuth } from "@/server/auth/context";
+import { requirePortalAuth } from "@/server/auth/context";
 import { listOrganizationUsers } from "@/server/services/user";
 import { prisma } from "@/server/db/client";
 import { PageHeader } from "@/components/page-header";
@@ -24,7 +24,7 @@ import { formatRelative } from "@/lib/format";
 export const metadata: Metadata = { title: "Users" };
 
 export default async function PortalUsersPage() {
-  const ctx = await requireAuth();
+  const ctx = await requirePortalAuth();
   if (ctx.organization?.role !== "CLIENT_ADMIN") redirect("/portal");
   const orgId = ctx.organization.id;
 

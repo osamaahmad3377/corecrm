@@ -19,6 +19,7 @@ import { ActivityTimeline } from "./activity-timeline";
 import { SlaPanel } from "./sla-panel";
 import {
   AssigneeControl,
+  DueDateControl,
   PriorityControl,
   StatusControl,
   ClientTicketActions,
@@ -35,16 +36,17 @@ export async function TicketDetail({
 }: {
   ctx: AuthContext;
   ticketId: string;
-  mode: "admin" | "portal";
+  mode: "admin" | "portal" | "employee";
 }) {
   const ticket = await getTicketForContext(ctx, ticketId);
+  const isStaff = mode !== "portal";
   const isAdmin = mode === "admin";
 
   const [statuses, priorities, agents, teams, emailAccounts] = await Promise.all([
     getStatuses(),
     getPriorities(),
-    isAdmin && can(ctx, "ticket.assign") ? assignableAgents() : Promise.resolve([]),
-    isAdmin && can(ctx, "ticket.assign")
+    isStaff && can(ctx, "ticket.assign") ? assignableAgents() : Promise.resolve([]),
+    isStaff && can(ctx, "ticket.assign")
       ? prisma.team.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } })
       : Promise.resolve([]),
     isAdmin && can(ctx, "email.send")
@@ -57,7 +59,12 @@ export async function TicketDetail({
   ]);
 
   const requesterName = `${ticket.requester.firstName} ${ticket.requester.lastName}`;
-  const basePath = isAdmin ? "/admin/tickets" : "/portal/tickets";
+  const basePath =
+    mode === "admin"
+      ? "/admin/tickets"
+      : mode === "employee"
+        ? "/employee/tasks"
+        : "/portal/tickets";
 
   const details = (
     <Card>
@@ -67,17 +74,27 @@ export async function TicketDetail({
       <CardContent className="space-y-2.5 text-sm">
         <Detail label="Requester" value={requesterName} />
         <Detail label="Email" value={ticket.requester.email} />
-        {isAdmin && (
+        {isStaff && (
           <Detail
             label="Organization"
             value={
-              <Link
-                href={`/admin/organizations/${ticket.organization.id}`}
-                className="text-primary hover:underline"
-              >
-                {ticket.organization.name}
-              </Link>
+              isAdmin ? (
+                <Link
+                  href={`/admin/organizations/${ticket.organization.id}`}
+                  className="text-primary hover:underline"
+                >
+                  {ticket.organization.name}
+                </Link>
+              ) : (
+                ticket.organization.name
+              )
             }
+          />
+        )}
+        {ticket.dueAt && (
+          <Detail
+            label="Deadline"
+            value={formatDateTime(ticket.dueAt, ctx.timezone)}
           />
         )}
         <Detail
@@ -127,7 +144,7 @@ export async function TicketDetail({
             <span className="font-mono text-sm text-muted-foreground">
               {ticket.ticketNumber}
             </span>
-            {isAdmin && (
+            {isStaff && (
               <OrganizationBadge name={ticket.organization.name} />
             )}
           </div>
@@ -150,7 +167,7 @@ export async function TicketDetail({
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
         {/* Conversation column */}
         <div className="min-w-0 space-y-4">
-          {!isAdmin && (
+          {mode === "portal" && (
             <ClientTicketActions
               ticketId={ticket.id}
               statusKey={ticket.status.key}
@@ -189,12 +206,23 @@ export async function TicketDetail({
 
         {/* Sidebar */}
         <div className="space-y-4">
-          {isAdmin && can(ctx, "ticket.changeStatus") && (
+          {isStaff && can(ctx, "ticket.changeStatus") && (
             <Card>
               <CardHeader>
                 <CardTitle className="text-sm">Manage</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
+                {can(ctx, "ticket.setDueDate") && (
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">
+                      Deadline
+                    </label>
+                    <DueDateControl
+                      ticketId={ticket.id}
+                      current={ticket.dueAt ? ticket.dueAt.toISOString() : null}
+                    />
+                  </div>
+                )}
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground">
                     Status

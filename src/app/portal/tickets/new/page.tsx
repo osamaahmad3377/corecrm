@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { requireAuth } from "@/server/auth/context";
+import { requirePortalAuth } from "@/server/auth/context";
 import { prisma } from "@/server/db/client";
 import { getPriorities } from "@/server/services/lookups";
 import { organizationAssets } from "@/server/services/asset";
@@ -9,7 +9,7 @@ import { NewTicketForm } from "@/components/tickets/new-ticket-form";
 export const metadata: Metadata = { title: "Create ticket" };
 
 export default async function NewPortalTicketPage() {
-  const ctx = await requireAuth();
+  const ctx = await requirePortalAuth();
   const orgId = ctx.organization!.id;
 
   const [categories, priorities, assets] = await Promise.all([

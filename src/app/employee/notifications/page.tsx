@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { requirePortalAuth } from "@/server/auth/context";
+import { requireInternal } from "@/server/auth/context";
 import { prisma } from "@/server/db/client";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/states";
@@ -10,8 +10,8 @@ import { Bell } from "lucide-react";
 
 export const metadata: Metadata = { title: "Notifications" };
 
-export default async function NotificationsPage() {
-  const ctx = await requirePortalAuth();
+export default async function EmployeeNotificationsPage() {
+  const ctx = await requireInternal();
   const [items, unread] = await Promise.all([
     prisma.notification.findMany({
       where: { userId: ctx.userId },
@@ -21,6 +21,10 @@ export default async function NotificationsPage() {
     prisma.notification.count({ where: { userId: ctx.userId, readAt: null } }),
   ]);
 
+  // Rewrite admin ticket links to the employee task route.
+  const link = (url: string | null) =>
+    url?.replace(/^\/admin\/tickets\//, "/employee/tasks/") ?? "#";
+
   return (
     <>
       <PageHeader
@@ -28,7 +32,6 @@ export default async function NotificationsPage() {
         description={unread > 0 ? `${unread} unread` : "You're all caught up"}
         actions={unread > 0 && <MarkAllReadButton />}
       />
-
       {items.length === 0 ? (
         <EmptyState icon={Bell} title="No notifications yet" />
       ) : (
@@ -36,7 +39,7 @@ export default async function NotificationsPage() {
           {items.map((n) => (
             <li key={n.id}>
               <Link
-                href={n.linkUrl ?? "#"}
+                href={link(n.linkUrl)}
                 className="flex items-start gap-3 px-4 py-3 hover:bg-accent/40"
               >
                 {!n.readAt && (

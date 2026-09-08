@@ -4,6 +4,7 @@ import type { InternalRole } from "@prisma/client";
 import { auth } from "./index";
 import { AuthContext, can, hasInternalRank, Permission } from "./rbac";
 import { AppError, forbidden, unauthorized } from "@/lib/errors";
+import { readImpersonation } from "./impersonation";
 
 /**
  * Resolve the acting user from the session. Organization access is derived here
@@ -92,6 +93,31 @@ export async function guardPage<T>(fn: () => Promise<T>): Promise<T> {
     }
     throw e;
   }
+}
+
+/**
+ * Auth context for the CLIENT PORTAL. Real client users pass through unchanged.
+ * An internal user with a valid "view as client" cookie is returned as a
+ * `CLIENT_USER` of the viewed org (with `viewingAsClient: true`) so every
+ * client-facing service scopes exactly as it would for a real client. Internal
+ * users without the cookie are rejected — the portal layout redirects them.
+ */
+export async function requirePortalAuth(): Promise<AuthContext> {
+  const ctx = await requireAuth();
+  if (!ctx.isInternal) {
+    if (!ctx.organization) throw forbidden();
+    return ctx;
+  }
+  if (!can(ctx, "org.impersonate")) throw forbidden();
+  const viewing = await readImpersonation(ctx.userId);
+  if (!viewing) throw forbidden();
+  return {
+    ...ctx,
+    isInternal: false,
+    internalRole: null,
+    organization: { id: viewing.id, role: "CLIENT_USER" },
+    viewingAsClient: true,
+  };
 }
 
 /** Client IP + UA for audit logging. Best-effort behind Vercel's proxy. */

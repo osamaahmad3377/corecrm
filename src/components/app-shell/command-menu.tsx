@@ -26,7 +26,7 @@ export function CommandMenu({
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  scope: "admin" | "portal";
+  scope: "admin" | "portal" | "employee";
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -77,7 +77,12 @@ export function CommandMenu({
     router.push(href);
   }
 
-  const base = scope === "admin" ? "/admin" : "/portal";
+  const ticketHref = (id: string) =>
+    scope === "portal"
+      ? `/portal/tickets/${id}`
+      : scope === "employee"
+        ? `/employee/tasks/${id}`
+        : `/admin/tickets/${id}`;
 
   return (
     <CommandDialog open={open} onOpenChange={onOpenChange}>
@@ -101,7 +106,7 @@ export function CommandMenu({
               <CommandItem
                 key={t.id}
                 value={`ticket-${t.id}-${t.ticketNumber}-${t.subject}`}
-                onSelect={() => go(`${base}/tickets/${t.id}`)}
+                onSelect={() => go(ticketHref(t.id))}
               >
                 <Ticket className="size-4" />
                 <span className="font-mono text-xs text-muted-foreground">

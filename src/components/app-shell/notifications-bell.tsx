@@ -25,7 +25,7 @@ export function NotificationsBell({
   scope,
   initialUnread,
 }: {
-  scope: "admin" | "portal";
+  scope: "admin" | "portal" | "employee";
   initialUnread: number;
 }) {
   const router = useRouter();
@@ -136,7 +136,7 @@ export function NotificationsBell({
         </div>
         <div className="border-t px-3 py-2 text-center">
           <Link
-            href={scope === "admin" ? "/admin" : "/portal/notifications"}
+            href={scope === "portal" ? "/portal/notifications" : scope === "employee" ? "/employee" : "/admin"}
             onClick={() => setOpen(false)}
             className="text-xs text-primary hover:underline"
           >

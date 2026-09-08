@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { requireAuth } from "@/server/auth/context";
+import { requirePortalAuth } from "@/server/auth/context";
 import { TicketDetail } from "@/components/tickets/ticket-detail";
 import { AppError } from "@/lib/errors";
 
@@ -11,7 +11,7 @@ export default async function PortalTicketPage({
 }: {
   params: Promise<{ ticketId: string }>;
 }) {
-  const ctx = await requireAuth();
+  const ctx = await requirePortalAuth();
   const { ticketId } = await params;
 
   try {

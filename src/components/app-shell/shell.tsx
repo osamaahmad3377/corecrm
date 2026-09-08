@@ -19,15 +19,22 @@ export function Shell({
   profileHref,
   scope,
   unreadCount,
+  banner,
+  homeHref,
   children,
 }: {
   nav: NavItem[];
   user: { name: string; email: string; image?: string | null };
   profileHref: string;
-  scope: "admin" | "portal";
+  scope: "admin" | "portal" | "employee";
   unreadCount: number;
+  banner?: React.ReactNode;
+  homeHref?: string;
   children: React.ReactNode;
 }) {
+  const home =
+    homeHref ??
+    (scope === "admin" ? "/admin" : scope === "employee" ? "/employee" : "/portal");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [cmdOpen, setCmdOpen] = useState(false);
 
@@ -36,7 +43,7 @@ export function Shell({
       {/* Desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r bg-sidebar lg:flex">
         <div className="flex h-14 items-center border-b px-4">
-          <Link href={scope === "admin" ? "/admin" : "/portal"}>
+          <Link href={home}>
             <Brand />
           </Link>
         </div>
@@ -60,6 +67,7 @@ export function Shell({
 
       {/* Main column */}
       <div className="lg:pl-64">
+        {banner}
         <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur">
           <Button
             variant="ghost"

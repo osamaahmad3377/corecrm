@@ -1,29 +1,26 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { requirePortalAuth } from "@/server/auth/context";
-import { listTickets } from "@/server/services/ticket";
+import { requireInternal } from "@/server/auth/context";
+import { listMyTasks } from "@/server/services/ticket";
 import { getStatuses, getPriorities } from "@/server/services/lookups";
 import { ticketListFilterSchema } from "@/validators/ticket";
 import { PageHeader } from "@/components/page-header";
-import { Button } from "@/components/ui/button";
 import { TicketTable } from "@/components/tickets/ticket-table";
 import { TicketFilters } from "@/components/tickets/ticket-filters";
 import { DataPagination } from "@/components/data-pagination";
-import { Plus } from "lucide-react";
 
-export const metadata: Metadata = { title: "My tickets" };
+export const metadata: Metadata = { title: "My tasks" };
 
-export default async function PortalTicketsPage({
+export default async function EmployeeTasksPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const ctx = await requirePortalAuth();
+  const ctx = await requireInternal();
   const sp = await searchParams;
   const filter = ticketListFilterSchema.parse(sp);
 
   const [result, statuses, priorities] = await Promise.all([
-    listTickets(ctx, filter),
+    listMyTasks(ctx, filter),
     getStatuses(),
     getPriorities(),
   ]);
@@ -31,24 +28,14 @@ export default async function PortalTicketsPage({
   return (
     <>
       <PageHeader
-        title="My tickets"
-        description={`${result.total} ticket${result.total === 1 ? "" : "s"}`}
-        actions={
-          <Button asChild>
-            <Link href="/portal/tickets/new">
-              <Plus className="size-4" /> Create ticket
-            </Link>
-          </Button>
-        }
+        title="My tasks"
+        description={`${result.total} ticket${result.total === 1 ? "" : "s"} assigned to you or your team`}
       />
-
       <TicketFilters
         statuses={statuses.map((s) => ({ key: s.key, label: s.label }))}
         priorities={priorities.map((p) => ({ key: p.key, label: p.label }))}
       />
-
-      <TicketTable rows={result.items} basePath="/portal/tickets" showOrg={false} />
-
+      <TicketTable rows={result.items} basePath="/employee/tasks" showOrg />
       <DataPagination
         page={result.page}
         pageSize={result.pageSize}

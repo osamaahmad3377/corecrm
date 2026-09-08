@@ -13,7 +13,9 @@ import {
   assignTicketAction,
   changePriorityAction,
   changeStatusAction,
+  setTicketDueDateAction,
 } from "@/server/actions/tickets";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 
 interface Option {
@@ -92,6 +94,55 @@ export function PriorityControl({
         ))}
       </SelectContent>
     </Select>
+  );
+}
+
+export function DueDateControl({
+  ticketId,
+  current,
+}: {
+  ticketId: string;
+  current: string | null;
+}) {
+  const [pending, start] = useTransition();
+  const router = useRouter();
+  // datetime-local wants "YYYY-MM-DDTHH:mm"
+  const value = current ? new Date(current).toISOString().slice(0, 16) : "";
+  return (
+    <div className="flex items-center gap-1.5">
+      <Input
+        type="datetime-local"
+        defaultValue={value}
+        disabled={pending}
+        className="h-8 text-xs"
+        onChange={(e) =>
+          start(async () => {
+            const iso = e.target.value
+              ? new Date(e.target.value).toISOString()
+              : null;
+            const res = await setTicketDueDateAction(ticketId, iso);
+            if (!res.ok) toast.error(res.error);
+            else router.refresh();
+          })
+        }
+      />
+      {current && (
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() =>
+            start(async () => {
+              const res = await setTicketDueDateAction(ticketId, null);
+              if (!res.ok) toast.error(res.error);
+              else router.refresh();
+            })
+          }
+          className="text-xs text-muted-foreground hover:text-foreground"
+        >
+          clear
+        </button>
+      )}
+    </div>
   );
 }
 

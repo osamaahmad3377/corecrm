@@ -68,6 +68,13 @@ export const adminNav: NavItem[] = [
   },
 ];
 
+export const employeeNav: NavItem[] = [
+  { label: "Dashboard", href: "/employee", icon: "dashboard", exact: true },
+  { label: "My Tasks", href: "/employee/tasks", icon: "tickets" },
+  { label: "Notifications", href: "/employee/notifications", icon: "notifications" },
+  { label: "Profile", href: "/employee/profile", icon: "profile" },
+];
+
 export const portalNav: NavItem[] = [
   { label: "Dashboard", href: "/portal", icon: "dashboard", exact: true },
   { label: "My tickets", href: "/portal/tickets", icon: "tickets" },

@@ -155,6 +155,20 @@ enum SettingScope {
   ORGANIZATION
 }
 
+enum TeamStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum EmailHandledStatus {
+  INFO
+  IGNORED
+}
+
+enum EmailTemplateChannel {
+  TRANSACTIONAL
+}
+
 // ===========================================================================
 //  IDENTITY & ORGANIZATIONS
 // ===========================================================================
@@ -190,6 +204,8 @@ model User {
   assetsAssigned      Asset[]
   sessions            Session[]
   authAccounts        Account[]
+  handledEmails       EmailMessage[]     @relation("EmailHandledBy")
+  editedTemplates     EmailTemplate[]    @relation("EmailTemplateEditor")
 
   @@index([isInternal, status])
 }
@@ -208,6 +224,10 @@ model Organization {
   postalCode       String?
   mainPhone        String?
   mainEmail        String?
+  businessHours    String?
+  location         String?
+  sharepointUrl    String?
+  onboardingDate   DateTime           @default(now())
   status           OrganizationStatus @default(ACTIVE)
   notes            String?
   accountManagerId String?
@@ -312,11 +332,12 @@ model Session {
 // ===========================================================================
 
 model Team {
-  id          String   @id @default(uuid())
-  name        String   @unique
+  id          String     @id @default(uuid())
+  name        String     @unique
   description String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  status      TeamStatus @default(ACTIVE)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 
   members       TeamMember[]
   tickets       Ticket[]
@@ -469,6 +490,7 @@ model Ticket {
   preferredContactMethod PreferredContactMethod?
   impact                 ImpactLevel?
   urgency                UrgencyLevel?
+  dueAt                  DateTime? // manual deadline set by staff (distinct from SLA)
   firstResponseAt        DateTime?
   responseDueAt          DateTime?
   resolutionDueAt        DateTime?
@@ -664,7 +686,7 @@ model EmailThread {
 }
 
 model EmailMessage {
-  id                String         @id @default(uuid())
+  id                String              @id @default(uuid())
   emailThreadId     String
   emailAccountId    String
   providerMessageId String
@@ -680,21 +702,25 @@ model EmailMessage {
   snippet           String?
   inReplyTo         String?
   references        Json?
-  isRead            Boolean        @default(false)
-  hasAttachments    Boolean        @default(false)
+  isRead            Boolean             @default(false)
+  hasAttachments    Boolean             @default(false)
   ticketId          String?
   contactId         String?
   organizationId    String?
+  handledStatus     EmailHandledStatus? // set when an admin triages a non-ticket email
+  handledById       String?
+  handledAt         DateTime?
   receivedAt        DateTime?
   sentAt            DateTime?
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
 
   emailThread   EmailThread       @relation(fields: [emailThreadId], references: [id], onDelete: Cascade)
   emailAccount  EmailAccount      @relation(fields: [emailAccountId], references: [id], onDelete: Cascade)
   ticket        Ticket?           @relation(fields: [ticketId], references: [id], onDelete: SetNull)
   contact       Contact?          @relation(fields: [contactId], references: [id], onDelete: SetNull)
   organization  Organization?     @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  handledBy     User?             @relation("EmailHandledBy", fields: [handledById], references: [id], onDelete: SetNull)
   attachments   EmailAttachment[]
   ticketMessage TicketMessage?
 
@@ -703,6 +729,7 @@ model EmailMessage {
   @@index([emailThreadId])
   @@index([ticketId])
   @@index([direction, createdAt])
+  @@index([handledStatus])
 }
 
 model EmailAttachment {
@@ -820,4 +847,25 @@ model Setting {
 model Counter {
   id    String @id // e.g. "ticket:2026"
   value Int    @default(0)
+}
+
+/// Admin-editable transactional email templates. `key` matches a system event
+/// (e.g. "TICKET_CREATED") for built-ins, or a custom slug for ad-hoc templates.
+/// Built-ins (`isSystem`) can be edited or reset but not deleted. Bodies support
+/// {{variable}} substitution; unknown variables render empty.
+model EmailTemplate {
+  id          String               @id @default(uuid())
+  key         String               @unique
+  name        String
+  description String?
+  subject     String
+  bodyHtml    String
+  channel     EmailTemplateChannel @default(TRANSACTIONAL)
+  isSystem    Boolean              @default(false)
+  isActive    Boolean              @default(true)
+  updatedById String?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  updatedBy User? @relation("EmailTemplateEditor", fields: [updatedById], references: [id], onDelete: SetNull)
 }

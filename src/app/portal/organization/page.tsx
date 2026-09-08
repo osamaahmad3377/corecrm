@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { requireAuth } from "@/server/auth/context";
+import { requirePortalAuth } from "@/server/auth/context";
 import { getOrganizationOverview } from "@/server/services/organization";
 import { prisma } from "@/server/db/client";
 import { PageHeader } from "@/components/page-header";
@@ -10,7 +10,7 @@ import { formatDuration } from "@/lib/format";
 export const metadata: Metadata = { title: "Organization" };
 
 export default async function PortalOrganizationPage() {
-  const ctx = await requireAuth();
+  const ctx = await requirePortalAuth();
   const orgId = ctx.organization!.id;
   const { org, stats } = await getOrganizationOverview(orgId);
 
