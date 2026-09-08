@@ -24,8 +24,8 @@ export function fail(error: AppError) {
 
 /** Wrap a route handler body; translates thrown errors into safe responses. */
 export async function handle(
-  fn: () => Promise<NextResponse>,
-): Promise<NextResponse> {
+  fn: () => Promise<Response>,
+): Promise<Response> {
   try {
     return await fn();
   } catch (e) {
