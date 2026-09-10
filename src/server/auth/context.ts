@@ -5,7 +5,6 @@ import { auth } from "./index";
 import { AuthContext, can, hasInternalRank, Permission } from "./rbac";
 import { AppError, forbidden, unauthorized } from "@/lib/errors";
 import { readImpersonation } from "./impersonation";
-import { prisma } from "@/server/db/client";
 
 /**
  * Resolve the acting user from the session. Organization access is derived here
@@ -15,16 +14,6 @@ export async function getAuthContext(): Promise<AuthContext | null> {
   const session = await auth();
   if (!session?.user?.id) return null;
   const u = session.user;
-
-  // The session token is self-contained, so a token minted before the row was
-  // removed or disabled (e.g. after a DB reseed) would otherwise sail through
-  // every read and only blow up on the first write that references the user.
-  const live = await prisma.user.findUnique({
-    where: { id: u.id },
-    select: { status: true },
-  });
-  if (!live || live.status === "DISABLED") return null;
-
   return {
     userId: u.id,
     email: u.email,

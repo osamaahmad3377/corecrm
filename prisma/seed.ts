@@ -194,18 +194,21 @@ async function main() {
   }
 
   // --- Internal users ---
+  // Stable ids so that re-running the seed after a `migrate reset` keeps
+  // existing sessions (JWTs reference the user id) valid.
   const internal = [
-    { email: "superadmin@corecrm.dev", name: "Alex Super", role: "SUPER_ADMIN" as const },
-    { email: "admin@corecrm.dev", name: "Morgan Admin", role: "ADMIN" as const },
-    { email: "manager@corecrm.dev", name: "Sam Manager", role: "SUPPORT_MANAGER" as const },
-    { email: "agent@corecrm.dev", name: "Riley Agent", role: "SUPPORT_AGENT" as const },
-    { email: "agent2@corecrm.dev", name: "Jordan Tech", role: "SUPPORT_AGENT" as const },
+    { id: "00000000-0000-4000-a000-000000000001", email: "superadmin@corecrm.dev", name: "Alex Super", role: "SUPER_ADMIN" as const },
+    { id: "00000000-0000-4000-a000-000000000002", email: "admin@corecrm.dev", name: "Morgan Admin", role: "ADMIN" as const },
+    { id: "00000000-0000-4000-a000-000000000003", email: "manager@corecrm.dev", name: "Sam Manager", role: "SUPPORT_MANAGER" as const },
+    { id: "00000000-0000-4000-a000-000000000004", email: "agent@corecrm.dev", name: "Riley Agent", role: "SUPPORT_AGENT" as const },
+    { id: "00000000-0000-4000-a000-000000000005", email: "agent2@corecrm.dev", name: "Jordan Tech", role: "SUPPORT_AGENT" as const },
   ];
   const staff: Record<string, { id: string }> = {};
   for (const u of internal) {
     const user = await prisma.user.upsert({
       where: { email: u.email },
       create: {
+        id: u.id,
         email: u.email,
         name: u.name,
         hashedPassword: pw,
@@ -303,14 +306,15 @@ async function main() {
 
   // --- Client users ---
   const clientUsers = [
-    { email: "john@abc-manufacturing.example.com", name: "John Smith", role: "CLIENT_ADMIN" as const },
-    { email: "sarah@abc-manufacturing.example.com", name: "Sarah Jones", role: "CLIENT_USER" as const },
+    { id: "00000000-0000-4000-b000-000000000001", email: "john@abc-manufacturing.example.com", name: "John Smith", role: "CLIENT_ADMIN" as const },
+    { id: "00000000-0000-4000-b000-000000000002", email: "sarah@abc-manufacturing.example.com", name: "Sarah Jones", role: "CLIENT_USER" as const },
   ];
   const clients: Record<string, { id: string }> = {};
   for (const cu of clientUsers) {
     const user = await prisma.user.upsert({
       where: { email: cu.email },
       create: {
+        id: cu.id,
         email: cu.email,
         name: cu.name,
         hashedPassword: pw,
