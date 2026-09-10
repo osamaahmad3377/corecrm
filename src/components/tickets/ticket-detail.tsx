@@ -17,6 +17,7 @@ import { Conversation } from "./conversation";
 import { MessageComposer } from "./message-composer";
 import { ActivityTimeline } from "./activity-timeline";
 import { SlaPanel } from "./sla-panel";
+import { DeadlineBadge } from "./deadline-badge";
 import {
   AssigneeControl,
   DueDateControl,
@@ -115,15 +116,13 @@ export async function TicketDetail({
           label="Deadline"
           value={
             ticket.dueAt ? (
-              <span
-                className={
-                  new Date(ticket.dueAt) < new Date() &&
-                  !ticket.status.isTerminal
-                    ? "font-medium text-destructive"
-                    : ""
-                }
-              >
-                {formatDateTime(ticket.dueAt, ctx.timezone)}
+              <span className="flex flex-col items-end gap-1">
+                <span>{formatDateTime(ticket.dueAt, ctx.timezone)}</span>
+                <DeadlineBadge
+                  dueAt={ticket.dueAt}
+                  terminal={ticket.status.isTerminal}
+                  timezone={ctx.timezone}
+                />
               </span>
             ) : mode === "portal" ? (
               "To be confirmed"

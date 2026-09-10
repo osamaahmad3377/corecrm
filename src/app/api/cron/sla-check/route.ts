@@ -3,6 +3,7 @@ import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/server/db/client";
 import { sweepSlaBreaches } from "@/server/services/sla";
+import { sweepDeadlineAlerts } from "@/server/services/ticket";
 import { notificationService } from "@/server/services/notification";
 
 export const runtime = "nodejs";
@@ -58,14 +59,39 @@ export async function GET(req: NextRequest) {
     });
   }
 
+  // --- Deadline alerts (approaching within 4h, or passed) ---
+  const { dueSoon, duePassed } = await sweepDeadlineAlerts(4);
+  for (const t of [
+    ...dueSoon.map((t) => ({ t, kind: "soon" as const })),
+    ...duePassed.map((t) => ({ t, kind: "passed" as const })),
+  ]) {
+    const recipients = new Set<string>(managerIds);
+    if (t.t.assignedAgentId) recipients.add(t.t.assignedAgentId);
+    t.t.assignedTeam?.members.forEach((m) => recipients.add(m.userId));
+    await notificationService.notifyDeadline({
+      ticket: {
+        id: t.t.id,
+        ticketNumber: t.t.ticketNumber,
+        subject: t.t.subject,
+        dueAt: t.t.dueAt,
+      },
+      recipientUserIds: [...recipients],
+      kind: t.kind,
+    });
+  }
+
   logger.info("cron.sla_check", {
     response: responseBreaches.length,
     resolution: resolutionBreaches.length,
+    dueSoon: dueSoon.length,
+    duePassed: duePassed.length,
   });
   return Response.json({
     ok: true,
     responseBreaches: responseBreaches.length,
     resolutionBreaches: resolutionBreaches.length,
+    dueSoon: dueSoon.length,
+    duePassed: duePassed.length,
   });
 }
 

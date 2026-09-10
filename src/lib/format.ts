@@ -52,6 +52,37 @@ export function formatDuration(minutes: number): string {
   return `${days % 1 === 0 ? days : days.toFixed(1)}d`;
 }
 
+/**
+ * Deadline status for UI. `warnHours` — how far out to start warning.
+ */
+export function deadlineStatus(
+  dueAt: Date | string | number,
+  opts?: { terminal?: boolean; warnHours?: number },
+): { tone: "neutral" | "warning" | "destructive"; label: string; ms: number } {
+  const due = new Date(dueAt).getTime();
+  const ms = due - Date.now();
+  const warnMs = (opts?.warnHours ?? 24) * 3600_000;
+
+  if (opts?.terminal) {
+    return { tone: "neutral", label: `Due ${formatRelative(due)}`, ms };
+  }
+  if (ms < 0) {
+    return {
+      tone: "destructive",
+      label: `Overdue ${formatDistanceToNowStrict(new Date(due))}`,
+      ms,
+    };
+  }
+  if (ms <= warnMs) {
+    return {
+      tone: "warning",
+      label: `Due in ${formatDistanceToNowStrict(new Date(due))}`,
+      ms,
+    };
+  }
+  return { tone: "neutral", label: `Due ${formatRelative(due)}`, ms };
+}
+
 export function initials(name: string): string {
   return name
     .trim()

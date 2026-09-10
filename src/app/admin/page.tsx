@@ -2,11 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { requireInternal } from "@/server/auth/context";
 import {
+  deadlineAlerts,
   internalDashboardStats,
   ticketChartData,
   listTickets,
 } from "@/server/services/ticket";
 import { platformStats } from "@/server/services/analytics";
+import { DeadlineAlerts } from "@/components/tickets/deadline-alerts";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,7 +34,7 @@ export const metadata: Metadata = { title: "Dashboard" };
 
 export default async function AdminDashboard() {
   const ctx = await requireInternal();
-  const [stats, charts, recent, platform] = await Promise.all([
+  const [stats, charts, recent, platform, deadlines] = await Promise.all([
     internalDashboardStats(ctx),
     ticketChartData(),
     listTickets(ctx, {
@@ -42,6 +44,7 @@ export default async function AdminDashboard() {
       sort: "newest",
     } as never),
     platformStats(),
+    deadlineAlerts(ctx, { orgWide: true, warnHours: 24 }),
   ]);
   const cb = platform.channelBreakdown;
 
@@ -59,6 +62,13 @@ export default async function AdminDashboard() {
             </Link>
           </Button>
         }
+      />
+
+      <DeadlineAlerts
+        overdue={deadlines.overdue}
+        dueSoon={deadlines.dueSoon}
+        basePath="/admin/tickets"
+        timezone={ctx.timezone}
       />
 
       <div className="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">

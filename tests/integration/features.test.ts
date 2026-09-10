@@ -12,7 +12,11 @@ import {
   resetTemplate,
 } from "@/server/services/email-template";
 import { createTeam, addTeamMember, deleteTeam } from "@/server/services/team";
-import { setTicketDueDate } from "@/server/services/ticket";
+import {
+  setTicketDueDate,
+  sweepDeadlineAlerts,
+  deadlineAlerts,
+} from "@/server/services/ticket";
 
 const suffix = randomBytes(4).toString("hex");
 let adminId: string;
@@ -161,6 +165,80 @@ describe("ticket deadlines", () => {
     expect(fresh.dueAt).toBeNull();
 
     await prisma.ticket.delete({ where: { id: ticket.id } });
+    await prisma.contact.delete({ where: { id: contact.id } });
+    await prisma.organization.delete({ where: { id: org.id } });
+  });
+});
+
+describe("deadline alerts", () => {
+  it("flags approaching and passed deadlines once, and lists them", async () => {
+    const status = await prisma.ticketStatus.findFirstOrThrow({
+      where: { key: "NEW" },
+    });
+    const priority = await prisma.ticketPriority.findFirstOrThrow({
+      where: { key: "HIGH" },
+    });
+    const org = await prisma.organization.create({
+      data: { name: `QA ${suffix} Deadlines` },
+    });
+    const contact = await prisma.contact.create({
+      data: {
+        organizationId: org.id,
+        firstName: "D",
+        lastName: "L",
+        email: `dl-${suffix}@x.test`,
+      },
+    });
+
+    const mk = (num: string, dueOffsetMs: number) =>
+      prisma.ticket.create({
+        data: {
+          ticketNumber: num,
+          organizationId: org.id,
+          requesterContactId: contact.id,
+          subject: `deadline ${num}`,
+          description: "<p>x</p>",
+          statusId: status.id,
+          priorityId: priority.id,
+          source: "INTERNAL",
+          assignedAgentId: agentId,
+          dueAt: new Date(Date.now() + dueOffsetMs),
+        },
+      });
+
+    const soon = await mk(`TKT-2098-${suffix.slice(0, 4)}01`, 2 * 3600_000); // +2h
+    const past = await mk(`TKT-2098-${suffix.slice(0, 4)}02`, -3 * 3600_000); // -3h
+    const far = await mk(`TKT-2098-${suffix.slice(0, 4)}03`, 10 * 24 * 3600_000); // far off
+
+    const swept = await sweepDeadlineAlerts(4);
+    expect(swept.dueSoon.map((t) => t.id)).toContain(soon.id);
+    expect(swept.duePassed.map((t) => t.id)).toContain(past.id);
+    expect(swept.dueSoon.map((t) => t.id)).not.toContain(far.id);
+
+    // Idempotent — second sweep returns nothing for the same tickets.
+    const again = await sweepDeadlineAlerts(4);
+    expect(again.dueSoon.map((t) => t.id)).not.toContain(soon.id);
+    expect(again.duePassed.map((t) => t.id)).not.toContain(past.id);
+
+    // Dashboard view: agent sees overdue + due-soon for their own tickets.
+    const view = await deadlineAlerts(
+      {
+        userId: agentId,
+        email: "x@y.z",
+        name: "A",
+        isInternal: true,
+        internalRole: "SUPPORT_AGENT",
+        organization: null,
+        timezone: "UTC",
+      },
+      { warnHours: 24 },
+    );
+    expect(view.dueSoon.some((t) => t.id === soon.id)).toBe(true);
+    expect(view.overdue.some((t) => t.id === past.id)).toBe(true);
+
+    await prisma.ticket.deleteMany({
+      where: { id: { in: [soon.id, past.id, far.id] } },
+    });
     await prisma.contact.delete({ where: { id: contact.id } });
     await prisma.organization.delete({ where: { id: org.id } });
   });

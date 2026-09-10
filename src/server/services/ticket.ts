@@ -1215,6 +1215,111 @@ export async function myTeamIds(ctx: AuthContext): Promise<string[]> {
   return teams.map((t) => t.teamId);
 }
 
+const deadlineRowInclude = {
+  organization: { select: { id: true, name: true } },
+  status: true,
+  priority: true,
+  assignedAgent: { select: { id: true, name: true, image: true } },
+} satisfies Prisma.TicketInclude;
+
+/**
+ * Tickets whose committed deadline (`dueAt`) is overdue or approaching.
+ * Scoped to the caller's own tickets unless `orgWide` (used on the admin
+ * dashboard). Terminal tickets are excluded.
+ */
+export async function deadlineAlerts(
+  ctx: AuthContext,
+  opts: { orgWide?: boolean; warnHours?: number } = {},
+) {
+  const now = new Date();
+  const soon = new Date(now.getTime() + (opts.warnHours ?? 24) * 3600_000);
+
+  const baseScope: Prisma.TicketWhereInput = opts.orgWide
+    ? {}
+    : await myScopeWhere(ctx);
+
+  const [overdue, dueSoon] = await Promise.all([
+    prisma.ticket.findMany({
+      where: {
+        AND: [
+          baseScope,
+          { status: { isTerminal: false } },
+          { dueAt: { lt: now } },
+        ],
+      },
+      include: deadlineRowInclude,
+      orderBy: { dueAt: "asc" },
+      take: 25,
+    }),
+    prisma.ticket.findMany({
+      where: {
+        AND: [
+          baseScope,
+          { status: { isTerminal: false } },
+          { dueAt: { gte: now, lte: soon } },
+        ],
+      },
+      include: deadlineRowInclude,
+      orderBy: { dueAt: "asc" },
+      take: 25,
+    }),
+  ]);
+
+  return { overdue, dueSoon };
+}
+
+/**
+ * Cron sweep: find non-terminal tickets that have just crossed into
+ * "deadline approaching" (within `soonHours`) or "deadline passed", and haven't
+ * been notified yet. Flags them and returns them for the notification step.
+ */
+export async function sweepDeadlineAlerts(
+  soonHours = 4,
+  now: Date = new Date(),
+) {
+  const soon = new Date(now.getTime() + soonHours * 3600_000);
+  const recipientSelect = {
+    id: true,
+    ticketNumber: true,
+    subject: true,
+    dueAt: true,
+    assignedAgentId: true,
+    assignedTeam: { select: { members: { select: { userId: true } } } },
+  } satisfies Prisma.TicketSelect;
+
+  const dueSoon = await prisma.ticket.findMany({
+    where: {
+      status: { isTerminal: false },
+      dueAt: { gte: now, lte: soon },
+      dueSoonNotifiedAt: null,
+    },
+    select: recipientSelect,
+  });
+  const duePassed = await prisma.ticket.findMany({
+    where: {
+      status: { isTerminal: false },
+      dueAt: { lt: now },
+      duePassedNotifiedAt: null,
+    },
+    select: recipientSelect,
+  });
+
+  if (dueSoon.length) {
+    await prisma.ticket.updateMany({
+      where: { id: { in: dueSoon.map((t) => t.id) } },
+      data: { dueSoonNotifiedAt: now },
+    });
+  }
+  if (duePassed.length) {
+    await prisma.ticket.updateMany({
+      where: { id: { in: duePassed.map((t) => t.id) } },
+      data: { duePassedNotifiedAt: now },
+    });
+  }
+
+  return { dueSoon, duePassed };
+}
+
 export async function listMyTasks(
   ctx: AuthContext,
   filter: TicketListFilter,

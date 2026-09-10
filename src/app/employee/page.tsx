@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { requireInternal } from "@/server/auth/context";
 import {
+  deadlineAlerts,
   employeeChartData,
   employeeDashboardStats,
   listMyTasks,
@@ -15,6 +16,8 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge, PriorityBadge, OrganizationBadge } from "@/components/badges";
 import { EmptyState } from "@/components/states";
 import { DonutChart, DualTrendChart } from "@/components/charts";
+import { DeadlineAlerts } from "@/components/tickets/deadline-alerts";
+import { DeadlineBadge } from "@/components/tickets/deadline-badge";
 import { formatRelative, formatDateTime } from "@/lib/format";
 import {
   Inbox,
@@ -33,7 +36,7 @@ export default async function EmployeeDashboard() {
   const ctx = await requireInternal();
   const teamIds = await myTeamIds(ctx);
 
-  const [stats, charts, recent, teamQueue, teams] = await Promise.all([
+  const [stats, charts, recent, teamQueue, teams, deadlines] = await Promise.all([
     employeeDashboardStats(ctx),
     employeeChartData(ctx),
     listMyTasks(ctx, { page: 1, pageSize: 25, sort: "updated" } as never),
@@ -60,6 +63,7 @@ export default async function EmployeeDashboard() {
           select: { name: true },
         })
       : Promise.resolve([]),
+    deadlineAlerts(ctx, { warnHours: 24 }),
   ]);
 
   const recentTickets = recent.items.slice(0, 10);
@@ -78,6 +82,14 @@ export default async function EmployeeDashboard() {
             <Link href="/employee/tasks">View all tasks</Link>
           </Button>
         }
+      />
+
+      {/* 0 — Deadline alerts (overdue / approaching) */}
+      <DeadlineAlerts
+        overdue={deadlines.overdue}
+        dueSoon={deadlines.dueSoon}
+        basePath="/employee/tasks"
+        timezone={ctx.timezone}
       />
 
       {/* 1 — Recent tickets, front and centre */}
@@ -122,18 +134,13 @@ export default async function EmployeeDashboard() {
                       statusKey={t.status.key}
                       label={t.status.label}
                     />
-                    <span className="hidden w-32 shrink-0 text-right text-xs text-muted-foreground lg:block">
+                    <span className="hidden shrink-0 text-right text-xs text-muted-foreground lg:block">
                       {t.dueAt ? (
-                        <span
-                          className={
-                            new Date(t.dueAt) < new Date() &&
-                            !t.status.isTerminal
-                              ? "font-medium text-destructive"
-                              : ""
-                          }
-                        >
-                          due {formatRelative(t.dueAt)}
-                        </span>
+                        <DeadlineBadge
+                          dueAt={t.dueAt}
+                          terminal={t.status.isTerminal}
+                          timezone={ctx.timezone}
+                        />
                       ) : (
                         formatRelative(t.updatedAt)
                       )}

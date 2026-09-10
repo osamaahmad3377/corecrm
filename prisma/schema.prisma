@@ -146,6 +146,8 @@ enum NotificationType {
   TICKET_STATUS_CHANGED
   TICKET_RESOLVED
   TICKET_SLA_BREACHED
+  TICKET_DUE_SOON
+  TICKET_DUE_PASSED
   EMAIL_ACCOUNT_FAILURE
   MENTION
 }
@@ -492,6 +494,8 @@ model Ticket {
   urgency                UrgencyLevel?
   requestedDueAt         DateTime? // "needed by" date proposed by the client (non-binding)
   dueAt                  DateTime? // binding deadline — only Admin / Support Manager may set it
+  dueSoonNotifiedAt      DateTime? // when the "deadline approaching" alert was sent
+  duePassedNotifiedAt    DateTime? // when the "deadline passed" alert was sent
   firstResponseAt        DateTime?
   responseDueAt          DateTime?
   resolutionDueAt        DateTime?

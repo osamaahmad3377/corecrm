@@ -272,4 +272,41 @@ export const notificationService = {
       ),
     );
   },
+
+  async notifyDeadline(opts: {
+    ticket: TicketRef & { dueAt: Date | null };
+    recipientUserIds: string[];
+    kind: "soon" | "passed";
+  }) {
+    const when = opts.ticket.dueAt
+      ? new Date(opts.ticket.dueAt).toLocaleString("en-GB", {
+          dateStyle: "medium",
+          timeStyle: "short",
+          timeZone: "UTC",
+        }) + " UTC"
+      : "";
+    const title =
+      opts.kind === "passed"
+        ? `Deadline passed · ${opts.ticket.ticketNumber}`
+        : `Deadline approaching · ${opts.ticket.ticketNumber}`;
+    await Promise.all(
+      [...new Set(opts.recipientUserIds)].map((userId) =>
+        deliver({
+          userId,
+          type: opts.kind === "passed" ? "TICKET_DUE_PASSED" : "TICKET_DUE_SOON",
+          title,
+          body: `${opts.ticket.subject}${when ? ` — due ${when}` : ""}`,
+          entityType: "ticket",
+          entityId: opts.ticket.id,
+          linkUrl: `/admin/tickets/${opts.ticket.id}`,
+          channels: ["IN_APP", "EMAIL"],
+          email: {
+            subject: `[${opts.ticket.ticketNumber}] ${title}`,
+            html: `<p>${title}</p><p><strong>${opts.ticket.ticketNumber}</strong> — ${opts.ticket.subject}</p>${when ? `<p>Deadline: ${when}</p>` : ""}`,
+            text: `${title}\n${opts.ticket.ticketNumber} — ${opts.ticket.subject}${when ? `\nDeadline: ${when}` : ""}`,
+          },
+        }),
+      ),
+    );
+  },
 };
