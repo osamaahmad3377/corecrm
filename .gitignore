@@ -53,3 +53,7 @@ next-env.d.ts
 # local uploads (dev storage fallback)
 /public/uploads
 /.uploads
+
+# stray secret dumps
+/AUTH_SECRET
+/ENCRYPTION_KEY

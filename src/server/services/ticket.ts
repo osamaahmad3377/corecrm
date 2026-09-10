@@ -1112,6 +1112,11 @@ export async function ticketChartData() {
 //  Employee ("my tasks") views
 // ---------------------------------------------------------------------------
 
+/**
+ * The set of tickets an employee "owns" for their portal:
+ * assigned directly to them, OR assigned to any team they belong to
+ * (regardless of which agent is on it — so the whole group queue is visible).
+ */
 async function myScopeWhere(ctx: AuthContext): Promise<Prisma.TicketWhereInput> {
   const teams = await prisma.teamMember.findMany({
     where: { userId: ctx.userId },
@@ -1121,11 +1126,17 @@ async function myScopeWhere(ctx: AuthContext): Promise<Prisma.TicketWhereInput> 
   return {
     OR: [
       { assignedAgentId: ctx.userId },
-      ...(teamIds.length
-        ? [{ assignedTeamId: { in: teamIds }, assignedAgentId: null }]
-        : []),
+      ...(teamIds.length ? [{ assignedTeamId: { in: teamIds } }] : []),
     ],
   };
+}
+
+export async function myTeamIds(ctx: AuthContext): Promise<string[]> {
+  const teams = await prisma.teamMember.findMany({
+    where: { userId: ctx.userId },
+    select: { teamId: true },
+  });
+  return teams.map((t) => t.teamId);
 }
 
 export async function listMyTasks(
@@ -1144,6 +1155,11 @@ export async function listMyTasks(
     and.push({ status: { key: filter.status } });
   }
   if (filter.priority) and.push({ priority: { key: filter.priority } });
+  if (filter.assignedAgentId === "me") {
+    and.push({ assignedAgentId: ctx.userId });
+  } else if (filter.assignedAgentId === "unassigned") {
+    and.push({ assignedAgentId: null });
+  }
   if (filter.view === "sla-breached") {
     and.push({
       OR: [{ responseBreached: true }, { resolutionBreached: true }],
@@ -1190,44 +1206,140 @@ export async function listMyTasks(
 
 export async function employeeDashboardStats(ctx: AuthContext) {
   const scope = await myScopeWhere(ctx);
+  const teamIds = await myTeamIds(ctx);
   const openScope: Prisma.TicketWhereInput = {
     AND: [scope, { status: { key: { in: OPEN_STATUS_KEYS } } }],
   };
-  const [openCount, awaitingResponse, overdue, dueToday, resolvedToday] =
+  const [
+    openCount,
+    assignedToMe,
+    teamQueue,
+    awaitingResponse,
+    overdue,
+    dueToday,
+    resolvedToday,
+  ] = await Promise.all([
+    prisma.ticket.count({ where: openScope }),
+    prisma.ticket.count({
+      where: {
+        assignedAgentId: ctx.userId,
+        status: { key: { in: OPEN_STATUS_KEYS } },
+      },
+    }),
+    teamIds.length
+      ? prisma.ticket.count({
+          where: {
+            assignedTeamId: { in: teamIds },
+            assignedAgentId: null,
+            status: { key: { in: OPEN_STATUS_KEYS } },
+          },
+        })
+      : Promise.resolve(0),
+    prisma.ticket.count({
+      where: { AND: [scope, { status: { key: "WAITING_FOR_INTERNAL" } }] },
+    }),
+    prisma.ticket.count({
+      where: {
+        AND: [
+          scope,
+          { status: { isTerminal: false } },
+          {
+            OR: [
+              { responseBreached: true },
+              { resolutionBreached: true },
+              { dueAt: { lt: new Date() } },
+            ],
+          },
+        ],
+      },
+    }),
+    prisma.ticket.count({
+      where: {
+        AND: [
+          scope,
+          { status: { isTerminal: false } },
+          { dueAt: { gte: startOfToday(), lt: endOfToday() } },
+        ],
+      },
+    }),
+    prisma.ticket.count({
+      where: { AND: [scope, { resolvedAt: { gte: startOfToday() } }] },
+    }),
+  ]);
+  return {
+    openCount,
+    assignedToMe,
+    teamQueue,
+    awaitingResponse,
+    overdue,
+    dueToday,
+    resolvedToday,
+  };
+}
+
+/** Status / priority / 14-day trend charts scoped to the employee's tickets. */
+export async function employeeChartData(ctx: AuthContext) {
+  const scope = await myScopeWhere(ctx);
+  const [byStatusRaw, byPriorityRaw, statuses, priorities, recentForTrend] =
     await Promise.all([
-      prisma.ticket.count({ where: openScope }),
-      prisma.ticket.count({
-        where: { AND: [scope, { status: { key: "WAITING_FOR_INTERNAL" } }] },
+      prisma.ticket.groupBy({
+        by: ["statusId"],
+        where: { AND: [scope] },
+        _count: true,
       }),
-      prisma.ticket.count({
+      prisma.ticket.groupBy({
+        by: ["priorityId"],
+        where: { AND: [scope, { status: { isTerminal: false } }] },
+        _count: true,
+      }),
+      prisma.ticketStatus.findMany(),
+      prisma.ticketPriority.findMany(),
+      prisma.ticket.findMany({
         where: {
           AND: [
             scope,
-            { status: { isTerminal: false } },
-            {
-              OR: [
-                { responseBreached: true },
-                { resolutionBreached: true },
-                { dueAt: { lt: new Date() } },
-              ],
-            },
+            { updatedAt: { gte: daysAgo(13) } },
           ],
         },
-      }),
-      prisma.ticket.count({
-        where: {
-          AND: [
-            scope,
-            { status: { isTerminal: false } },
-            { dueAt: { gte: startOfToday(), lt: endOfToday() } },
-          ],
-        },
-      }),
-      prisma.ticket.count({
-        where: { AND: [scope, { resolvedAt: { gte: startOfToday() } }] },
+        select: { createdAt: true, resolvedAt: true },
       }),
     ]);
-  return { openCount, awaitingResponse, overdue, dueToday, resolvedToday };
+
+  const trend: { date: string; created: number; resolved: number }[] = [];
+  for (let i = 0; i < 14; i++) {
+    const day = daysAgo(13 - i);
+    const key = day.toISOString().slice(0, 10);
+    trend.push({
+      date: key,
+      created: recentForTrend.filter(
+        (t) => t.createdAt.toISOString().slice(0, 10) === key,
+      ).length,
+      resolved: recentForTrend.filter(
+        (t) => t.resolvedAt && t.resolvedAt.toISOString().slice(0, 10) === key,
+      ).length,
+    });
+  }
+
+  return {
+    byStatus: byStatusRaw.map((s) => ({
+      name: statuses.find((x) => x.id === s.statusId)?.label ?? "?",
+      key: statuses.find((x) => x.id === s.statusId)?.key ?? "?",
+      value: s._count as number,
+    })),
+    byPriority: byPriorityRaw.map((p) => ({
+      name: priorities.find((x) => x.id === p.priorityId)?.label ?? "?",
+      key: priorities.find((x) => x.id === p.priorityId)?.key ?? "?",
+      value: p._count as number,
+    })),
+    trend,
+  };
+}
+
+function daysAgo(n: number) {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() - n);
+  d.setUTCHours(0, 0, 0, 0);
+  return d;
 }
 
 function endOfToday() {

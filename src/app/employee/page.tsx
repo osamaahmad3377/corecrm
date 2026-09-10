@@ -1,74 +1,102 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireInternal } from "@/server/auth/context";
-import { employeeDashboardStats, listMyTasks } from "@/server/services/ticket";
+import {
+  employeeChartData,
+  employeeDashboardStats,
+  listMyTasks,
+  myTeamIds,
+} from "@/server/services/ticket";
+import { prisma } from "@/server/db/client";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { StatusBadge, PriorityBadge } from "@/components/badges";
+import { StatusBadge, PriorityBadge, OrganizationBadge } from "@/components/badges";
 import { EmptyState } from "@/components/states";
-import { formatRelative } from "@/lib/format";
-import { Inbox, Clock, AlertTriangle, CalendarClock, CheckCircle2 } from "lucide-react";
+import { DonutChart, DualTrendChart } from "@/components/charts";
+import { formatRelative, formatDateTime } from "@/lib/format";
+import {
+  Inbox,
+  UserCheck,
+  Users,
+  Clock,
+  AlertTriangle,
+  CalendarClock,
+  CheckCircle2,
+} from "lucide-react";
 
 export const metadata: Metadata = { title: "My work" };
 
 export default async function EmployeeDashboard() {
   const ctx = await requireInternal();
-  const [stats, recent] = await Promise.all([
+  const teamIds = await myTeamIds(ctx);
+
+  const [stats, charts, recent, teamQueue, teams] = await Promise.all([
     employeeDashboardStats(ctx),
+    employeeChartData(ctx),
     listMyTasks(ctx, { page: 1, pageSize: 25, sort: "updated" } as never),
+    teamIds.length
+      ? prisma.ticket.findMany({
+          where: {
+            assignedTeamId: { in: teamIds },
+            assignedAgentId: null,
+            status: { key: { in: ["NEW", "OPEN", "IN_PROGRESS", "WAITING_FOR_INTERNAL", "WAITING_FOR_CLIENT"] } },
+          },
+          orderBy: { createdAt: "desc" },
+          take: 6,
+          include: {
+            organization: { select: { name: true } },
+            status: true,
+            priority: true,
+            assignedTeam: { select: { name: true } },
+          },
+        })
+      : Promise.resolve([]),
+    teamIds.length
+      ? prisma.team.findMany({
+          where: { id: { in: teamIds } },
+          select: { name: true },
+        })
+      : Promise.resolve([]),
   ]);
+
+  const recentTickets = recent.items.slice(0, 10);
 
   return (
     <>
       <PageHeader
         title={`Hi ${ctx.name.split(" ")[0]}`}
-        description="Your assigned tickets and team queue."
+        description={
+          teams.length
+            ? `Your tickets and the ${teams.map((t) => t.name).join(", ")} queue.`
+            : "Your assigned tickets."
+        }
         actions={
           <Button asChild>
-            <Link href="/employee/tasks">Open my tasks</Link>
+            <Link href="/employee/tasks">View all tasks</Link>
           </Button>
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <StatCard label="Open tasks" value={stats.openCount} icon={Inbox} href="/employee/tasks" />
-        <StatCard
-          label="Awaiting my reply"
-          value={stats.awaitingResponse}
-          tone={stats.awaitingResponse ? "warning" : "default"}
-          icon={Clock}
-        />
-        <StatCard
-          label="Overdue"
-          value={stats.overdue}
-          tone={stats.overdue ? "destructive" : "default"}
-          icon={AlertTriangle}
-          href="/employee/tasks?view=sla-breached"
-        />
-        <StatCard
-          label="Due today"
-          value={stats.dueToday}
-          tone={stats.dueToday ? "warning" : "default"}
-          icon={CalendarClock}
-        />
-        <StatCard label="Resolved today" value={stats.resolvedToday} tone="success" icon={CheckCircle2} />
-      </div>
-
-      <Card className="mt-6">
+      {/* 1 — Recent tickets, front and centre */}
+      <Card className="mb-6">
         <CardHeader className="flex-row items-center justify-between">
-          <CardTitle className="text-sm">Recently updated</CardTitle>
+          <CardTitle className="text-sm">Recent tickets</CardTitle>
           <Button asChild variant="ghost" size="sm">
-            <Link href="/employee/tasks">View all</Link>
+            <Link href="/employee/tasks">Open my tasks</Link>
           </Button>
         </CardHeader>
         <CardContent>
-          {recent.items.length === 0 ? (
-            <EmptyState title="Nothing assigned to you yet" />
+          {recentTickets.length === 0 ? (
+            <EmptyState
+              icon={Inbox}
+              title="Nothing assigned to you yet"
+              description="Tickets assigned to you or your team will show up here."
+            />
           ) : (
             <ul className="divide-y">
-              {recent.items.slice(0, 10).map((t) => (
+              {recentTickets.map((t) => (
                 <li key={t.id}>
                   <Link
                     href={`/employee/tasks/${t.id}`}
@@ -77,16 +105,37 @@ export default async function EmployeeDashboard() {
                     <span className="font-mono text-xs text-muted-foreground">
                       {t.ticketNumber}
                     </span>
-                    <span className="min-w-0 flex-1 truncate text-sm">
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">
                       {t.subject}
                     </span>
-                    <span className="hidden text-xs text-muted-foreground sm:block">
-                      {t.organization?.name}
+                    <span className="hidden md:block">
+                      <OrganizationBadge name={t.organization?.name ?? "—"} />
                     </span>
-                    <PriorityBadge priorityKey={t.priority.key} label={t.priority.label} />
-                    <StatusBadge statusKey={t.status.key} label={t.status.label} />
-                    <span className="hidden w-20 shrink-0 text-right text-xs text-muted-foreground md:block">
-                      {formatRelative(t.updatedAt)}
+                    <span className="hidden sm:block">
+                      <PriorityBadge
+                        priorityKey={t.priority.key}
+                        label={t.priority.label}
+                      />
+                    </span>
+                    <StatusBadge
+                      statusKey={t.status.key}
+                      label={t.status.label}
+                    />
+                    <span className="hidden w-32 shrink-0 text-right text-xs text-muted-foreground lg:block">
+                      {t.dueAt ? (
+                        <span
+                          className={
+                            new Date(t.dueAt) < new Date() &&
+                            !t.status.isTerminal
+                              ? "font-medium text-destructive"
+                              : ""
+                          }
+                        >
+                          due {formatRelative(t.dueAt)}
+                        </span>
+                      ) : (
+                        formatRelative(t.updatedAt)
+                      )}
                     </span>
                   </Link>
                 </li>
@@ -95,6 +144,122 @@ export default async function EmployeeDashboard() {
           )}
         </CardContent>
       </Card>
+
+      {/* 2 — Stats */}
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
+        <StatCard
+          label="My open tickets"
+          value={stats.assignedToMe}
+          icon={UserCheck}
+          href="/employee/tasks?assignedAgentId=me"
+        />
+        <StatCard
+          label="Team queue"
+          value={stats.teamQueue}
+          tone={stats.teamQueue > 0 ? "warning" : "default"}
+          icon={Users}
+        />
+        <StatCard
+          label="Awaiting my reply"
+          value={stats.awaitingResponse}
+          tone={stats.awaitingResponse > 0 ? "warning" : "default"}
+          icon={Clock}
+        />
+        <StatCard
+          label="Overdue"
+          value={stats.overdue}
+          tone={stats.overdue > 0 ? "destructive" : "default"}
+          icon={AlertTriangle}
+          href="/employee/tasks?view=sla-breached"
+        />
+        <StatCard
+          label="Due today"
+          value={stats.dueToday}
+          tone={stats.dueToday > 0 ? "warning" : "default"}
+          icon={CalendarClock}
+        />
+        <StatCard
+          label="Resolved today"
+          value={stats.resolvedToday}
+          tone="success"
+          icon={CheckCircle2}
+        />
+      </div>
+
+      {/* 3 — Charts */}
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">My tickets by status</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <DonutChart data={charts.byStatus} />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Open by priority</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <DonutChart data={charts.byPriority} />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">
+              Assigned vs resolved (14 days)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <DualTrendChart data={charts.trend} />
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* 4 — Team queue (unassigned) */}
+      {teamIds.length > 0 && (
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="text-sm">
+              Team queue — unassigned ({stats.teamQueue})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {teamQueue.length === 0 ? (
+              <EmptyState title="Team queue is clear" />
+            ) : (
+              <ul className="divide-y">
+                {teamQueue.map((t) => (
+                  <li key={t.id}>
+                    <Link
+                      href={`/employee/tasks/${t.id}`}
+                      className="flex items-center gap-3 py-2.5 hover:bg-accent/40"
+                    >
+                      <span className="font-mono text-xs text-muted-foreground">
+                        {t.ticketNumber}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-sm">
+                        {t.subject}
+                      </span>
+                      <PriorityBadge
+                        priorityKey={t.priority.key}
+                        label={t.priority.label}
+                      />
+                      <StatusBadge
+                        statusKey={t.status.key}
+                        label={t.status.label}
+                      />
+                      <span className="hidden w-24 shrink-0 text-right text-xs text-muted-foreground sm:block">
+                        {formatDateTime(t.createdAt, ctx.timezone)}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </>
   );
 }

@@ -104,6 +104,43 @@ export function TrendChart({
   );
 }
 
+export function DualTrendChart({
+  data,
+}: {
+  data: { date: string; created: number; resolved: number }[];
+}) {
+  return (
+    <ResponsiveContainer width="100%" height={220}>
+      <LineChart data={data} margin={{ left: 0, right: 12, top: 8 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+        <XAxis
+          dataKey="date"
+          tick={{ fontSize: 10 }}
+          tickFormatter={(d: string) => d.slice(5)}
+        />
+        <YAxis tick={{ fontSize: 11 }} allowDecimals={false} width={28} />
+        <Tooltip contentStyle={tooltipStyle} />
+        <Line
+          type="monotone"
+          dataKey="created"
+          name="Assigned"
+          stroke="var(--chart-1)"
+          strokeWidth={2}
+          dot={false}
+        />
+        <Line
+          type="monotone"
+          dataKey="resolved"
+          name="Resolved"
+          stroke="var(--chart-2)"
+          strokeWidth={2}
+          dot={false}
+        />
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
+
 function EmptyChart() {
   return (
     <div className="flex h-[220px] items-center justify-center text-sm text-muted-foreground">
