@@ -45,13 +45,21 @@ Create a PostgreSQL 16 database (Neon or Supabase recommended).
 
 ```json
 { "crons": [
-  { "path": "/api/cron/email-sync", "schedule": "*/10 * * * *" },
-  { "path": "/api/cron/sla-check",  "schedule": "*/5 * * * *" }
+  { "path": "/api/cron/email-sync",   "schedule": "*/10 * * * *" },
+  { "path": "/api/cron/sla-check",     "schedule": "*/5 * * * *" },
+  { "path": "/api/cron/automations",   "schedule": "*/15 * * * *" }
 ]}
 ```
 
+- `email-sync` — renews mailbox webhook subscriptions + delta sync.
+- `sla-check` — SLA breach sweep **and** ticket-deadline (`dueAt`) alerts.
+- `automations` — evaluates time-based automation rules (invitation reminders,
+  stale-ticket / no-reply follow-ups, weekly client digest, re-engagement) and
+  sends every due `AutomationJob`.
+
 Vercel Cron calls these with `Authorization: Bearer $CRON_SECRET` automatically.
-No extra setup beyond the env var.
+No extra setup beyond the env var. (Hobby plan runs crons once/day — upgrade for
+the schedules above, or hit the endpoints from an external scheduler.)
 
 ## 4. First-run data
 

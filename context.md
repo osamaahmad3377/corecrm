@@ -713,6 +713,25 @@ advanced reports, billing.
   the org page and in Reports.
 - **Analytics** — dashboard + reports show client / employee / group counts,
   active vs closed tickets, and the request-channel breakdown.
+- **Deadline alerts** — `dueAt` overdue/approaching shows a card on the admin
+  and employee dashboards; the `sla-check` cron sends in-app + email alerts
+  (≤4h out, or passed) to the assignee, team and managers.
+- **Email automation engine** (`AutomationRule` + `AutomationJob`) — an admin
+  binds an editable template to a **trigger** ("module") with an audience and a
+  delay/threshold. `Settings → Automations` lists, toggles, edits and creates
+  rules and shows an activity log; **Run now** forces a pass.
+  - **Event triggers** (fired from services): `CLIENT_ONBOARDED`,
+    `CLIENT_USER_ACTIVATED`, `TICKET_CREATED`, `TICKET_ASSIGNED`,
+    `TICKET_AWAITING_CLIENT`, `TICKET_RESOLVED` (delayed follow-up).
+  - **Time-based triggers** (evaluated by `/api/cron/automations`, every 15m):
+    `INVITATION_REMINDER`, `TICKET_NO_CLIENT_REPLY`, `TICKET_STALE`,
+    `WEEKLY_CLIENT_DIGEST`, `CLIENT_INACTIVE`.
+  - Sends are idempotent (`AutomationJob.dedupeKey`), re-checked against current
+    state before sending, and retried up to 3× on failure.
+  - Seeded system templates: client onboarding welcome, invitation reminder,
+    account activated, resolution follow-up, waiting-on-client reminder, stale
+    ticket check-in, weekly ticket summary, re-engagement. Admins can also
+    create custom templates and point any rule at them.
 
 ---
 

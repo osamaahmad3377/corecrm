@@ -100,8 +100,16 @@ email, provider webhooks, reconciliation cron.
 without it.*
 
 **Settings** — company/general, ticket categories & priorities, SLA policies,
-**editable email templates** (8 built-ins + custom), email accounts, security +
-audit log, profile.
+**editable email templates** (16 built-ins + custom), **email automations**
+(bind a template to a trigger — onboarding welcome, resolution follow-up,
+"waiting on you" reminders, stale-ticket nudges, weekly client digest,
+re-engagement…), email accounts, security + audit log, profile.
+
+**Automation** — the system emails clients on its own: a welcome on onboarding,
+a follow-up a few days after a ticket is resolved ("did that fix it?"),
+reminders while a ticket waits on the client, a nudge on stale tickets, a weekly
+open-ticket summary to client admins, and re-engagement for inactive users —
+all editable and toggleable under Settings → Automations.
 
 **Danger zone** — hard-delete an organization (typed-name confirm, cascades all
 its data).
