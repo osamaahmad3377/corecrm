@@ -39,7 +39,12 @@ export default async function EmployeeDashboard() {
   const [stats, charts, recent, teamQueue, teams, deadlines] = await Promise.all([
     employeeDashboardStats(ctx),
     employeeChartData(ctx),
-    listMyTasks(ctx, { page: 1, pageSize: 25, sort: "updated" } as never),
+    listMyTasks(ctx, {
+      status: "ALL",
+      page: 1,
+      pageSize: 25,
+      sort: "updated",
+    } as never),
     teamIds.length
       ? prisma.ticket.findMany({
           where: {
@@ -105,7 +110,7 @@ export default async function EmployeeDashboard() {
             <EmptyState
               icon={Inbox}
               title="Nothing assigned to you yet"
-              description="Tickets assigned to you or your team will show up here."
+              description="Tickets assigned to you or your team — open or closed — will show up here."
             />
           ) : (
             <ul className="divide-y">

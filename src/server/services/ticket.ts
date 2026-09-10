@@ -1345,13 +1345,15 @@ export async function listMyTasks(
     and.push({ status: { key: { in: OPEN_STATUS_KEYS } } });
   } else if (filter.status === "CLOSED_ALL") {
     and.push({ status: { isTerminal: true } });
+  } else if (filter.status === "ALL" || filter.view === "all") {
+    // no status filter — every ticket in scope
   } else if (filter.status) {
     and.push({ status: { key: filter.status } });
-  } else if (filter.view !== "sla-breached" && filter.view !== "closed") {
-    // Default view is the open work queue.
-    and.push({ status: { key: { in: OPEN_STATUS_KEYS } } });
   } else if (filter.view === "closed") {
     and.push({ status: { isTerminal: true } });
+  } else if (filter.view !== "sla-breached") {
+    // Default view is the open work queue.
+    and.push({ status: { key: { in: OPEN_STATUS_KEYS } } });
   }
   if (filter.priority) and.push({ priority: { key: filter.priority } });
   if (filter.assignedAgentId === "me") {
