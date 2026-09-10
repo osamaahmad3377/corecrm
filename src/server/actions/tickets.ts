@@ -135,6 +135,9 @@ export async function addTicketMessageAction(
       revalidate: [
         `/admin/tickets/${ticketId}`,
         `/portal/tickets/${ticketId}`,
+        `/employee/tasks/${ticketId}`,
+        "/employee",
+        "/employee/tasks",
       ],
       message: "Sent",
     };
@@ -152,7 +155,16 @@ export async function assignTicketAction(
     const ctx = await requireAuth();
     const meta = await requestMeta();
     await assignTicket(ctx, ticketId, parsed.data, meta);
-    return { revalidate: [`/admin/tickets/${ticketId}`, "/admin/tickets"] };
+    return {
+      revalidate: [
+        `/admin/tickets/${ticketId}`,
+        `/employee/tasks/${ticketId}`,
+        "/admin/tickets",
+        "/admin",
+        "/employee",
+        "/employee/tasks",
+      ],
+    };
   });
 }
 
@@ -171,8 +183,12 @@ export async function changeStatusAction(
       revalidate: [
         `/admin/tickets/${ticketId}`,
         `/portal/tickets/${ticketId}`,
+        `/employee/tasks/${ticketId}`,
         "/admin/tickets",
+        "/admin",
         "/portal/tickets",
+        "/employee",
+        "/employee/tasks",
       ],
     };
   });
@@ -189,7 +205,16 @@ export async function changePriorityAction(
     const ctx = await requireAuth();
     const meta = await requestMeta();
     await changePriority(ctx, ticketId, parsed.data.priorityKey, meta);
-    return { revalidate: [`/admin/tickets/${ticketId}`, "/admin/tickets"] };
+    return {
+      revalidate: [
+        `/admin/tickets/${ticketId}`,
+        `/employee/tasks/${ticketId}`,
+        "/admin/tickets",
+        "/admin",
+        "/employee",
+        "/employee/tasks",
+      ],
+    };
   });
 }
 
@@ -207,7 +232,9 @@ export async function setTicketDueDateAction(
         `/employee/tasks/${ticketId}`,
         `/portal/tickets/${ticketId}`,
         "/admin/tickets",
+        "/admin",
         "/employee/tasks",
+        "/employee",
       ],
     };
   });
