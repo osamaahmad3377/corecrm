@@ -171,6 +171,37 @@ enum EmailTemplateChannel {
   TRANSACTIONAL
 }
 
+/// The system event / "module" an automation rule hooks into.
+enum AutomationTrigger {
+  CLIENT_ONBOARDED // organization onboarded — send a welcome/onboarding email
+  INVITATION_REMINDER // portal invitation still pending after `thresholdDays`
+  CLIENT_USER_ACTIVATED // a client user accepted their invite & signed in
+  TICKET_CREATED // ticket raised (by any channel)
+  TICKET_ASSIGNED // ticket assigned to an agent
+  TICKET_AWAITING_CLIENT // ticket moved to "Waiting for Client"
+  TICKET_RESOLVED // ticket marked resolved — confirmation / satisfaction follow-up
+  TICKET_NO_CLIENT_REPLY // "Waiting for Client" for `thresholdDays` with no reply
+  TICKET_STALE // open ticket, no activity for `thresholdDays`
+  WEEKLY_CLIENT_DIGEST // weekly summary of open tickets to a client's admins
+  CLIENT_INACTIVE // client user hasn't signed in for `thresholdDays`
+}
+
+enum AutomationAudience {
+  TICKET_REQUESTER // the contact / user who raised the ticket
+  ORG_PRIMARY_CONTACT // the organization's primary contact
+  ORG_CLIENT_ADMINS // every CLIENT_ADMIN in the organization
+  ORG_CLIENT_USERS // every client user in the organization
+  ASSIGNED_AGENT // the internal agent on the ticket
+  INVITED_PERSON // the invitee (invitation triggers)
+}
+
+enum AutomationJobStatus {
+  PENDING
+  SENT
+  SKIPPED
+  FAILED
+}
+
 // ===========================================================================
 //  IDENTITY & ORGANIZATIONS
 // ===========================================================================
@@ -872,5 +903,59 @@ model EmailTemplate {
   createdAt   DateTime             @default(now())
   updatedAt   DateTime             @updatedAt
 
-  updatedBy User? @relation("EmailTemplateEditor", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedBy       User?            @relation("EmailTemplateEditor", fields: [updatedById], references: [id], onDelete: SetNull)
+  automationRules AutomationRule[]
+}
+
+/// Binds an email template to a trigger ("module"). Event triggers fire when the
+/// event happens (after `delayMinutes`); time-based triggers are evaluated by the
+/// automations cron using `thresholdDays`.
+model AutomationRule {
+  id              String             @id @default(uuid())
+  name            String
+  description     String?
+  trigger         AutomationTrigger
+  emailTemplateId String
+  audience        AutomationAudience @default(TICKET_REQUESTER)
+  delayMinutes    Int                @default(0)
+  thresholdDays   Int                @default(3)
+  /// Optional extra guards, e.g. { "priorityIn": ["HIGH","CRITICAL"] }.
+  conditions      Json?
+  isActive        Boolean            @default(true)
+  isSystem        Boolean            @default(false)
+  lastRunAt       DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  emailTemplate EmailTemplate   @relation(fields: [emailTemplateId], references: [id], onDelete: Restrict)
+  jobs          AutomationJob[]
+
+  @@index([trigger, isActive])
+}
+
+/// A scheduled / completed send produced by a rule. `dedupeKey` guarantees a
+/// given (rule, entity, period) only ever sends once — safe for retries and
+/// overlapping cron runs.
+model AutomationJob {
+  id              String              @id @default(uuid())
+  ruleId          String
+  trigger         AutomationTrigger
+  entityType      String // "ticket" | "organization" | "invitation" | "user"
+  entityId        String
+  organizationId  String?
+  recipientEmail  String
+  recipientUserId String?
+  scheduledFor    DateTime
+  status          AutomationJobStatus @default(PENDING)
+  dedupeKey       String              @unique
+  attempts        Int                 @default(0)
+  sentAt          DateTime?
+  error           String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  rule AutomationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@index([status, scheduledFor])
+  @@index([entityType, entityId])
 }

@@ -323,5 +323,10 @@ export async function acceptInvitation(args: AcceptInvitationArgs) {
     metadata: { via: "invitation", email: user.email },
   });
 
+  if (!user.isInternal) {
+    const { fireAutomationEvent } = await import("./automation");
+    await fireAutomationEvent("CLIENT_USER_ACTIVATED", { userId: user.id });
+  }
+
   return user;
 }

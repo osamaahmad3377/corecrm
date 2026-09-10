@@ -11,6 +11,7 @@ const ALL = [
   { label: "SLA", href: "/admin/settings/sla" },
   { label: "Email", href: "/admin/settings/email", adminOnly: true },
   { label: "Templates", href: "/admin/settings/templates", adminOnly: true },
+  { label: "Automations", href: "/admin/settings/automations", adminOnly: true },
   { label: "Security", href: "/admin/settings/security", adminOnly: true },
   { label: "Profile", href: "/admin/settings/profile" },
 ];

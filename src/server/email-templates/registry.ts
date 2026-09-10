@@ -100,6 +100,120 @@ export const SYSTEM_TEMPLATES: SystemTemplate[] = [
     ctaVar: "url",
     ctaLabel: "Manage email accounts",
   },
+
+  // ---- Automation templates (used by AutomationRule) --------------------
+  {
+    key: "CLIENT_ONBOARDING",
+    name: "Client onboarding welcome",
+    description:
+      "Welcome email sent when a client organization is onboarded. Automation: CLIENT_ONBOARDED.",
+    variables: [
+      "recipientName",
+      "organizationName",
+      "accountManagerName",
+      "portalUrl",
+    ],
+    subject: "Welcome to {{appName}} support, {{organizationName}}",
+    body: "<p>Hi {{recipientName}},</p><p>Welcome aboard! Your organization <strong>{{organizationName}}</strong> is now set up with {{appName}} for IT support.</p><p>From the client portal you can raise support tickets, track their progress, upload screenshots and logs, and message our team directly. Your account manager is {{accountManagerName}}.</p><p>If you have any questions about getting started, just reply to this email.</p>",
+    ctaVar: "portalUrl",
+    ctaLabel: "Open the client portal",
+  },
+  {
+    key: "INVITATION_REMINDER",
+    name: "Invitation reminder",
+    description:
+      "Nudge when a portal invitation is still unaccepted. Automation: INVITATION_REMINDER.",
+    variables: ["recipientName", "organizationName", "acceptUrl", "daysAgo"],
+    subject: "Reminder: your {{appName}} invitation is waiting",
+    body: "<p>Hi {{recipientName}},</p><p>You were invited to the {{organizationName}} support portal {{daysAgo}} days ago and haven't set up your account yet. It only takes a minute — just choose a password.</p>",
+    ctaVar: "acceptUrl",
+    ctaLabel: "Accept your invitation",
+  },
+  {
+    key: "CLIENT_WELCOME_ACTIVATED",
+    name: "Portal account activated",
+    description:
+      "Sent right after a client user activates their account and first signs in. Automation: CLIENT_USER_ACTIVATED.",
+    variables: ["recipientName", "organizationName", "portalUrl"],
+    subject: "You're all set on {{appName}}",
+    body: "<p>Hi {{recipientName}},</p><p>Your {{organizationName}} support portal account is active. Here's what you can do from here:</p><ul><li>Raise a support ticket with a structured form</li><li>Track every ticket's status and deadline</li><li>Reply to our team in the ticket conversation</li></ul>",
+    ctaVar: "portalUrl",
+    ctaLabel: "Go to the portal",
+  },
+  {
+    key: "TICKET_FOLLOW_UP_RESOLVED",
+    name: "Resolution follow-up",
+    description:
+      "Checks in a few days after a ticket is resolved. Automation: TICKET_RESOLVED (delayed).",
+    variables: ["recipientName", "ticketNumber", "ticketSubject", "ticketUrl"],
+    subject: "[{{ticketNumber}}] Did that fix it?",
+    body: "<p>Hi {{recipientName}},</p><p>We marked <strong>{{ticketNumber}}</strong> — {{ticketSubject}} as resolved a few days ago. We just wanted to check the fix is still holding up.</p><p>If everything's working, no need to do anything. If the problem is back, reply on the ticket and we'll pick it straight back up.</p>",
+    ctaVar: "ticketUrl",
+    ctaLabel: "View the ticket",
+  },
+  {
+    key: "TICKET_AWAITING_CLIENT_REMINDER",
+    name: "Waiting on you — reminder",
+    description:
+      "Sent when a ticket has been waiting on the client for a while. Automation: TICKET_NO_CLIENT_REPLY.",
+    variables: [
+      "recipientName",
+      "ticketNumber",
+      "ticketSubject",
+      "ticketUrl",
+      "daysWaiting",
+    ],
+    subject: "[{{ticketNumber}}] We're waiting on your reply",
+    body: "<p>Hi {{recipientName}},</p><p>Ticket <strong>{{ticketNumber}}</strong> — {{ticketSubject}} has been waiting for your response for {{daysWaiting}} days. Our team needs a bit more information from you to move it forward.</p><p>Please reply on the ticket when you get a chance. If it's no longer an issue, let us know and we'll close it.</p>",
+    ctaVar: "ticketUrl",
+    ctaLabel: "Reply on the ticket",
+  },
+  {
+    key: "TICKET_STALE_NUDGE",
+    name: "Stale ticket check-in",
+    description:
+      "Sent when an open ticket has had no activity for a while. Automation: TICKET_STALE.",
+    variables: ["recipientName", "ticketNumber", "ticketSubject", "ticketUrl"],
+    subject: "[{{ticketNumber}}] Still on it — quick update",
+    body: "<p>Hi {{recipientName}},</p><p>Just letting you know we haven't forgotten about <strong>{{ticketNumber}}</strong> — {{ticketSubject}}. If anything has changed at your end, or this is now urgent, reply on the ticket and we'll reprioritise.</p>",
+    ctaVar: "ticketUrl",
+    ctaLabel: "View the ticket",
+  },
+  {
+    key: "WEEKLY_CLIENT_DIGEST",
+    name: "Weekly ticket summary",
+    description:
+      "Weekly roundup of open tickets to a client's admins. Automation: WEEKLY_CLIENT_DIGEST.",
+    variables: [
+      "recipientName",
+      "organizationName",
+      "openCount",
+      "waitingOnYouCount",
+      "resolvedThisWeek",
+      "ticketList",
+      "portalUrl",
+    ],
+    subject: "{{organizationName}} — your support summary",
+    body: "<p>Hi {{recipientName}},</p><p>Here's where things stand for <strong>{{organizationName}}</strong> this week:</p><ul><li><strong>{{openCount}}</strong> open ticket(s)</li><li><strong>{{waitingOnYouCount}}</strong> waiting on your input</li><li><strong>{{resolvedThisWeek}}</strong> resolved in the last 7 days</li></ul>{{ticketList}}",
+    ctaVar: "portalUrl",
+    ctaLabel: "Open the portal",
+  },
+  {
+    key: "CLIENT_REENGAGEMENT",
+    name: "Re-engagement — inactive user",
+    description:
+      "Sent to a client user who hasn't signed in for a while. Automation: CLIENT_INACTIVE.",
+    variables: [
+      "recipientName",
+      "organizationName",
+      "lastLoginDaysAgo",
+      "portalUrl",
+    ],
+    subject: "Everything OK with your IT, {{recipientName}}?",
+    body: "<p>Hi {{recipientName}},</p><p>We noticed it's been {{lastLoginDaysAgo}} days since you last used the {{organizationName}} support portal. If everything's running smoothly, great! If something's been niggling and you just haven't gotten around to logging it, now's a good time.</p>",
+    ctaVar: "portalUrl",
+    ctaLabel: "Raise a ticket",
+  },
 ];
 
 export const SYSTEM_TEMPLATE_KEYS = SYSTEM_TEMPLATES.map((t) => t.key);

@@ -28,25 +28,24 @@ function interpolate(input: string, vars: Record<string, unknown>): string {
   });
 }
 
-/**
- * Render a transactional email by template key. Uses the admin-editable DB row
- * when present, otherwise the built-in default from the registry.
- */
-export async function renderTemplate(
-  key: string,
-  vars: Record<string, unknown>,
-): Promise<RenderedEmail> {
-  const row = await prisma.emailTemplate.findUnique({ where: { key } });
-  const fallback = findSystemTemplate(key);
+interface RenderInput {
+  key: string;
+  subject: string;
+  bodyHtml: string;
+  name: string;
+}
 
-  const subjectTpl = row?.subject ?? fallback?.subject ?? "{{appName}}";
-  const bodyTpl = row?.bodyHtml ?? fallback?.body ?? "<p>{{appName}}</p>";
+function renderFrom(
+  input: RenderInput,
+  vars: Record<string, unknown>,
+): RenderedEmail {
+  const fallback = findSystemTemplate(input.key);
   const ctaVar = fallback?.ctaVar;
   const ctaLabel = fallback?.ctaLabel;
 
-  const subject = interpolate(subjectTpl, vars);
-  const bodyHtml = interpolate(bodyTpl, vars);
-  const heading = interpolate(row?.name ?? fallback?.name ?? APP_NAME, vars);
+  const subject = interpolate(input.subject, vars);
+  const bodyHtml = interpolate(input.bodyHtml, vars);
+  const heading = interpolate(input.name, vars);
 
   const cta =
     ctaVar && vars[ctaVar]
@@ -60,6 +59,40 @@ export async function renderTemplate(
     cta,
   });
   return { subject, html, text };
+}
+
+/**
+ * Render a transactional email by template key. Uses the admin-editable DB row
+ * when present, otherwise the built-in default from the registry.
+ */
+export async function renderTemplate(
+  key: string,
+  vars: Record<string, unknown>,
+): Promise<RenderedEmail> {
+  const row = await prisma.emailTemplate.findUnique({ where: { key } });
+  const fallback = findSystemTemplate(key);
+  return renderFrom(
+    {
+      key,
+      subject: row?.subject ?? fallback?.subject ?? "{{appName}}",
+      bodyHtml: row?.bodyHtml ?? fallback?.body ?? "<p>{{appName}}</p>",
+      name: row?.name ?? fallback?.name ?? APP_NAME,
+    },
+    vars,
+  );
+}
+
+/** Render a specific template row (used by the automation engine). */
+export async function renderTemplateById(
+  id: string,
+  vars: Record<string, unknown>,
+): Promise<RenderedEmail | null> {
+  const row = await prisma.emailTemplate.findUnique({ where: { id } });
+  if (!row || !row.isActive) return null;
+  return renderFrom(
+    { key: row.key, subject: row.subject, bodyHtml: row.bodyHtml, name: row.name },
+    vars,
+  );
 }
 
 // --- Admin management -------------------------------------------------

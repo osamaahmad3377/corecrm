@@ -17,6 +17,12 @@ import {
   sweepDeadlineAlerts,
   deadlineAlerts,
 } from "@/server/services/ticket";
+import {
+  ensureDefaultRules,
+  fireAutomationEvent,
+  processDueAutomationJobs,
+  evaluateTimeBasedRules,
+} from "@/server/services/automation";
 
 const suffix = randomBytes(4).toString("hex");
 let adminId: string;
@@ -240,6 +246,88 @@ describe("deadline alerts", () => {
       where: { id: { in: [soon.id, past.id, far.id] } },
     });
     await prisma.contact.delete({ where: { id: contact.id } });
+    await prisma.organization.delete({ where: { id: org.id } });
+  });
+});
+
+describe("email automation engine", () => {
+  it("onboarding event schedules an email to the primary contact and sends it", async () => {
+    await ensureDefaultRules();
+    const org = await prisma.organization.create({
+      data: { name: `QA ${suffix} Auto`, onboardingDate: new Date() },
+    });
+    await prisma.contact.create({
+      data: {
+        organizationId: org.id,
+        firstName: "Prim",
+        lastName: "Contact",
+        email: `prim-${suffix}@x.test`,
+        isPrimary: true,
+      },
+    });
+
+    await fireAutomationEvent("CLIENT_ONBOARDED", { organizationId: org.id });
+
+    const scheduled = await prisma.automationJob.findFirst({
+      where: {
+        entityType: "organization",
+        entityId: org.id,
+        trigger: "CLIENT_ONBOARDED",
+      },
+    });
+    expect(scheduled).not.toBeNull();
+    expect(scheduled!.recipientEmail).toBe(`prim-${suffix}@x.test`);
+
+    // Firing again is idempotent (dedupe key).
+    await fireAutomationEvent("CLIENT_ONBOARDED", { organizationId: org.id });
+    expect(
+      await prisma.automationJob.count({
+        where: { entityId: org.id, trigger: "CLIENT_ONBOARDED" },
+      }),
+    ).toBe(1);
+
+    const res = await processDueAutomationJobs(50);
+    expect(res.sent).toBeGreaterThanOrEqual(1);
+    const sent = await prisma.automationJob.findUniqueOrThrow({
+      where: { id: scheduled!.id },
+    });
+    expect(sent.status).toBe("SENT");
+
+    await prisma.automationJob.deleteMany({ where: { organizationId: org.id } });
+    await prisma.contact.deleteMany({ where: { organizationId: org.id } });
+    await prisma.organization.delete({ where: { id: org.id } });
+  });
+
+  it("time-based sweep schedules an invitation reminder for a stale pending invite", async () => {
+    await ensureDefaultRules();
+    const org = await prisma.organization.create({
+      data: { name: `QA ${suffix} Inv` },
+    });
+    const inv = await prisma.invitation.create({
+      data: {
+        email: `late-${suffix}@x.test`,
+        name: "Late Invitee",
+        tokenHash: `hash-${suffix}-${Math.random()}`,
+        clientRole: "CLIENT_USER",
+        organizationId: org.id,
+        invitedById: adminId,
+        status: "PENDING",
+        expiresAt: new Date(Date.now() + 86_400_000),
+        createdAt: new Date(Date.now() - 10 * 86_400_000),
+      },
+    });
+
+    const result = await evaluateTimeBasedRules();
+    expect(result.jobsScheduled).toBeGreaterThanOrEqual(1);
+
+    const job = await prisma.automationJob.findFirst({
+      where: { entityType: "invitation", entityId: inv.id },
+    });
+    expect(job).not.toBeNull();
+    expect(job!.recipientEmail).toBe(`late-${suffix}@x.test`);
+
+    await prisma.automationJob.deleteMany({ where: { entityId: inv.id } });
+    await prisma.invitation.delete({ where: { id: inv.id } });
     await prisma.organization.delete({ where: { id: org.id } });
   });
 });

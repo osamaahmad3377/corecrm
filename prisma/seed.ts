@@ -149,6 +149,50 @@ async function main() {
     });
   }
 
+  // --- Automation rules (built-in, bound to templates) ---
+  const defaultRules: {
+    name: string;
+    description: string;
+    trigger: string;
+    templateKey: string;
+    audience: string;
+    delayMinutes?: number;
+    thresholdDays?: number;
+    isActive?: boolean;
+  }[] = [
+    { name: "Client onboarding welcome", description: "Welcome the primary contact when an organization is onboarded.", trigger: "CLIENT_ONBOARDED", templateKey: "CLIENT_ONBOARDING", audience: "ORG_PRIMARY_CONTACT", delayMinutes: 0 },
+    { name: "Portal account activated", description: "Orientation email once a client user signs in for the first time.", trigger: "CLIENT_USER_ACTIVATED", templateKey: "CLIENT_WELCOME_ACTIVATED", audience: "INVITED_PERSON", delayMinutes: 10 },
+    { name: "Invitation reminder", description: "Nudge invitees who haven't set up their account.", trigger: "INVITATION_REMINDER", templateKey: "INVITATION_REMINDER", audience: "INVITED_PERSON", thresholdDays: 3 },
+    { name: "Resolution follow-up", description: "Check the fix held up a few days after a ticket is resolved.", trigger: "TICKET_RESOLVED", templateKey: "TICKET_FOLLOW_UP_RESOLVED", audience: "TICKET_REQUESTER", delayMinutes: 3 * 24 * 60 },
+    { name: "Waiting on client — reminder", description: "Remind the client when a ticket has been waiting on them.", trigger: "TICKET_NO_CLIENT_REPLY", templateKey: "TICKET_AWAITING_CLIENT_REMINDER", audience: "TICKET_REQUESTER", thresholdDays: 2 },
+    { name: "Stale ticket check-in", description: "Reassure the client on open tickets with no recent activity.", trigger: "TICKET_STALE", templateKey: "TICKET_STALE_NUDGE", audience: "TICKET_REQUESTER", thresholdDays: 5 },
+    { name: "Weekly ticket summary", description: "Weekly open-ticket roundup to each client's admins.", trigger: "WEEKLY_CLIENT_DIGEST", templateKey: "WEEKLY_CLIENT_DIGEST", audience: "ORG_CLIENT_ADMINS", thresholdDays: 7 },
+    { name: "Re-engage inactive client", description: "Reach out to client users who haven't signed in for a long time.", trigger: "CLIENT_INACTIVE", templateKey: "CLIENT_REENGAGEMENT", audience: "ORG_CLIENT_USERS", thresholdDays: 45, isActive: false },
+  ];
+  for (const def of defaultRules) {
+    const exists = await prisma.automationRule.findFirst({
+      where: { trigger: def.trigger as never, isSystem: true },
+    });
+    if (exists) continue;
+    const tpl = await prisma.emailTemplate.findUnique({
+      where: { key: def.templateKey },
+    });
+    if (!tpl) continue;
+    await prisma.automationRule.create({
+      data: {
+        name: def.name,
+        description: def.description,
+        trigger: def.trigger as never,
+        emailTemplateId: tpl.id,
+        audience: def.audience as never,
+        delayMinutes: def.delayMinutes ?? 0,
+        thresholdDays: def.thresholdDays ?? 3,
+        isActive: def.isActive ?? true,
+        isSystem: true,
+      },
+    });
+  }
+
   // --- Internal users ---
   const internal = [
     { email: "superadmin@corecrm.dev", name: "Alex Super", role: "SUPER_ADMIN" as const },

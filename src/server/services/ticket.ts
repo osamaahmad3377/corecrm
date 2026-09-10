@@ -13,6 +13,7 @@ import {
   buildSlaView,
 } from "./sla";
 import { statusByKeyTx, priorityByKeyTx } from "./lookups";
+import { fireAutomationEvent } from "./automation";
 import {
   AddMessageInput,
   CreateTicketInput,
@@ -517,6 +518,11 @@ export async function createTicket(args: CreateTicketCore) {
     });
   }
 
+  await fireAutomationEvent("TICKET_CREATED", { ticketId: created.id });
+  if (args.assignedAgentId) {
+    await fireAutomationEvent("TICKET_ASSIGNED", { ticketId: created.id });
+  }
+
   return created;
 }
 
@@ -779,6 +785,7 @@ export async function assignTicket(
       },
       agentUserId: input.assignedAgentId,
     });
+    await fireAutomationEvent("TICKET_ASSIGNED", { ticketId: ticket.id });
   }
 }
 
@@ -888,6 +895,12 @@ export async function changeStatus(
       toStatusLabel: target.label,
       forClient: ctx.isInternal,
     });
+  }
+
+  if (statusKey === STATUS_KEYS.RESOLVED) {
+    await fireAutomationEvent("TICKET_RESOLVED", { ticketId: ticket.id });
+  } else if (statusKey === STATUS_KEYS.WAITING_FOR_CLIENT) {
+    await fireAutomationEvent("TICKET_AWAITING_CLIENT", { ticketId: ticket.id });
   }
 }
 

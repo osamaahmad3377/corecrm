@@ -157,6 +157,9 @@ export async function onboardOrganization(args: OnboardArgs) {
     acceptUrl = res.acceptUrl;
   }
 
+  const { fireAutomationEvent } = await import("./automation");
+  await fireAutomationEvent("CLIENT_ONBOARDED", { organizationId: org.id });
+
   return { organization: org, contact, acceptUrl };
 }
 
