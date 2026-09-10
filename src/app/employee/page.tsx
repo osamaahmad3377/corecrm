@@ -24,6 +24,7 @@ import {
   AlertTriangle,
   CalendarClock,
   CheckCircle2,
+  Archive,
 } from "lucide-react";
 
 export const metadata: Metadata = { title: "My work" };
@@ -146,7 +147,7 @@ export default async function EmployeeDashboard() {
       </Card>
 
       {/* 2 — Stats */}
-      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
         <StatCard
           label="My open tickets"
           value={stats.assignedToMe}
@@ -183,6 +184,12 @@ export default async function EmployeeDashboard() {
           value={stats.resolvedToday}
           tone="success"
           icon={CheckCircle2}
+        />
+        <StatCard
+          label="Closed & resolved"
+          value={stats.closedTotal}
+          icon={Archive}
+          href="/employee/tasks?view=closed"
         />
       </div>
 

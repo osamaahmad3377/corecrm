@@ -314,6 +314,14 @@ export function NewTicketForm({
               </SelectContent>
             </Select>
           </div>
+          <div className="space-y-2 sm:col-span-2">
+            <Label htmlFor="requestedDueAt">Needed by (optional)</Label>
+            <Input id="requestedDueAt" name="requestedDueAt" type="date" />
+            <p className="text-xs text-muted-foreground">
+              A date you&apos;d like this resolved by. Our team will confirm the
+              committed deadline.
+            </p>
+          </div>
         </div>
       )}
 

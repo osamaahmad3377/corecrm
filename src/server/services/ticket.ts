@@ -55,6 +55,7 @@ export async function listTickets(ctx: AuthContext, filter: TicketListFilter) {
   if (view === "my" && ctx.isInternal) where.assignedAgentId = ctx.userId;
   if (view === "unassigned") where.assignedAgentId = null;
   if (view === "critical") where.priority = { key: "CRITICAL" };
+  if (view === "closed") where.status = { isTerminal: true };
   if (view === "sla-breached") {
     where.OR = [{ responseBreached: true }, { resolutionBreached: true }];
   }
@@ -62,6 +63,8 @@ export async function listTickets(ctx: AuthContext, filter: TicketListFilter) {
   // --- Explicit filters ---
   if (filter.status === "OPEN_ALL") {
     where.status = { key: { in: OPEN_STATUS_KEYS } };
+  } else if (filter.status === "CLOSED_ALL") {
+    where.status = { isTerminal: true };
   } else if (filter.status) {
     where.status = { key: filter.status };
   }
@@ -411,6 +414,7 @@ export async function createTicket(args: CreateTicketCore) {
           (input.preferredContactMethod as "EMAIL" | "PHONE" | "PORTAL") || null,
         impact: (input.impact as "LOW" | "MEDIUM" | "HIGH") || null,
         urgency: (input.urgency as "LOW" | "MEDIUM" | "HIGH") || null,
+        requestedDueAt: parseIsoOrNull(input.requestedDueAt),
         assignedAgentId: args.assignedAgentId ?? null,
         assignedTeamId: args.assignedTeamId ?? null,
       },
@@ -993,6 +997,78 @@ export async function setTicketDueDate(
   });
 }
 
+function parseIsoOrNull(v?: string | null): Date | null {
+  if (!v || v.trim() === "") return null;
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * The client's requested "needed by" date. Editable by the requesting client
+ * (or an internal staffer recording it on their behalf); non-binding — only
+ * Admin / Support Manager set the real {@link setTicketDueDate}.
+ */
+export async function setRequestedDueDate(
+  ctx: AuthContext,
+  ticketId: string,
+  iso: string | null,
+  meta?: Meta,
+) {
+  const ticket = await prisma.ticket.findUnique({
+    where: { id: ticketId },
+    select: {
+      id: true,
+      ticketNumber: true,
+      organizationId: true,
+      requestedDueAt: true,
+      status: { select: { isTerminal: true } },
+    },
+  });
+  if (!ticket) throw notFound("Ticket not found");
+
+  if (!ctx.isInternal) {
+    if (!ctx.organization || ctx.organization.id !== ticket.organizationId) {
+      throw forbidden();
+    }
+    if (ticket.status.isTerminal) {
+      throw conflict("This ticket is closed");
+    }
+  } else if (!can(ctx, "ticket.publicReply")) {
+    throw forbidden();
+  }
+
+  const requestedDueAt = parseIsoOrNull(iso);
+
+  await prisma.$transaction([
+    prisma.ticket.update({ where: { id: ticketId }, data: { requestedDueAt } }),
+    prisma.ticketActivity.create({
+      data: {
+        ticketId,
+        actorUserId: ctx.isInternal ? ctx.userId : null,
+        type: "STATUS_CHANGED",
+        fromValue: ticket.requestedDueAt
+          ? ticket.requestedDueAt.toISOString()
+          : null,
+        toValue: requestedDueAt ? requestedDueAt.toISOString() : "cleared",
+        metadata: { field: "requestedDueAt" },
+      },
+    }),
+  ]);
+
+  await recordAudit({
+    action: "TICKET_UPDATED",
+    entityType: "ticket",
+    entityId: ticketId,
+    actorUserId: ctx.userId,
+    ipAddress: meta?.ipAddress,
+    userAgent: meta?.userAgent,
+    metadata: {
+      ticketNumber: ticket.ticketNumber,
+      requestedDueAt: requestedDueAt?.toISOString() ?? null,
+    },
+  });
+}
+
 // ---------------------------------------------------------------------------
 //  Dashboard aggregates
 // ---------------------------------------------------------------------------
@@ -1147,12 +1223,17 @@ export async function listMyTasks(
   const where: Prisma.TicketWhereInput = { AND: [scope] };
   const and = where.AND as Prisma.TicketWhereInput[];
 
-  if (filter.status === "OPEN_ALL" || !filter.status) {
-    if (filter.view !== "sla-breached" && !filter.status) {
-      and.push({ status: { key: { in: OPEN_STATUS_KEYS } } });
-    }
-  } else {
+  if (filter.status === "OPEN_ALL") {
+    and.push({ status: { key: { in: OPEN_STATUS_KEYS } } });
+  } else if (filter.status === "CLOSED_ALL") {
+    and.push({ status: { isTerminal: true } });
+  } else if (filter.status) {
     and.push({ status: { key: filter.status } });
+  } else if (filter.view !== "sla-breached" && filter.view !== "closed") {
+    // Default view is the open work queue.
+    and.push({ status: { key: { in: OPEN_STATUS_KEYS } } });
+  } else if (filter.view === "closed") {
+    and.push({ status: { isTerminal: true } });
   }
   if (filter.priority) and.push({ priority: { key: filter.priority } });
   if (filter.assignedAgentId === "me") {
@@ -1218,6 +1299,7 @@ export async function employeeDashboardStats(ctx: AuthContext) {
     overdue,
     dueToday,
     resolvedToday,
+    closedTotal,
   ] = await Promise.all([
     prisma.ticket.count({ where: openScope }),
     prisma.ticket.count({
@@ -1265,6 +1347,9 @@ export async function employeeDashboardStats(ctx: AuthContext) {
     prisma.ticket.count({
       where: { AND: [scope, { resolvedAt: { gte: startOfToday() } }] },
     }),
+    prisma.ticket.count({
+      where: { AND: [scope, { status: { isTerminal: true } }] },
+    }),
   ]);
   return {
     openCount,
@@ -1274,6 +1359,7 @@ export async function employeeDashboardStats(ctx: AuthContext) {
     overdue,
     dueToday,
     resolvedToday,
+    closedTotal,
   };
 }
 

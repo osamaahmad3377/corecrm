@@ -427,6 +427,14 @@ async function main() {
           assetId: s.asset !== undefined ? assets[s.asset].id : null,
           responseDueAt: new Date(createdAt.getTime() + target.response * 60000),
           resolutionDueAt: new Date(createdAt.getTime() + target.resolution * 60000),
+          // Client-requested "needed by" on some tickets; a committed deadline
+          // (set by an admin) on the higher-priority ones.
+          requestedDueAt: ["HIGH", "CRITICAL", "MEDIUM"].includes(s.priority)
+            ? new Date(createdAt.getTime() + 3 * 24 * 3600_000)
+            : null,
+          dueAt: ["HIGH", "CRITICAL"].includes(s.priority)
+            ? new Date(createdAt.getTime() + 2 * 24 * 3600_000)
+            : null,
           firstResponseAt: s.messages.some((m) => m.from === "AGENT")
             ? new Date(createdAt.getTime() + 20 * 60000)
             : null,

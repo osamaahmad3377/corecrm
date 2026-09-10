@@ -490,7 +490,8 @@ model Ticket {
   preferredContactMethod PreferredContactMethod?
   impact                 ImpactLevel?
   urgency                UrgencyLevel?
-  dueAt                  DateTime? // manual deadline set by staff (distinct from SLA)
+  requestedDueAt         DateTime? // "needed by" date proposed by the client (non-binding)
+  dueAt                  DateTime? // binding deadline — only Admin / Support Manager may set it
   firstResponseAt        DateTime?
   responseDueAt          DateTime?
   resolutionDueAt        DateTime?

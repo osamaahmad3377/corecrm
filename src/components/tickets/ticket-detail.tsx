@@ -20,6 +20,7 @@ import { SlaPanel } from "./sla-panel";
 import {
   AssigneeControl,
   DueDateControl,
+  RequestedDueDateControl,
   PriorityControl,
   StatusControl,
   ClientTicketActions,
@@ -91,12 +92,46 @@ export async function TicketDetail({
             }
           />
         )}
-        {ticket.dueAt && (
-          <Detail
-            label="Deadline"
-            value={formatDateTime(ticket.dueAt, ctx.timezone)}
-          />
-        )}
+        <Detail
+          label={mode === "portal" ? "Needed by" : "Client needs it by"}
+          value={
+            mode === "portal" && !ticket.status.isTerminal ? (
+              <RequestedDueDateControl
+                ticketId={ticket.id}
+                current={
+                  ticket.requestedDueAt
+                    ? ticket.requestedDueAt.toISOString()
+                    : null
+                }
+              />
+            ) : ticket.requestedDueAt ? (
+              formatDate(ticket.requestedDueAt, ctx.timezone)
+            ) : mode === "portal" ? (
+              "—"
+            ) : null
+          }
+        />
+        <Detail
+          label="Deadline"
+          value={
+            ticket.dueAt ? (
+              <span
+                className={
+                  new Date(ticket.dueAt) < new Date() &&
+                  !ticket.status.isTerminal
+                    ? "font-medium text-destructive"
+                    : ""
+                }
+              >
+                {formatDateTime(ticket.dueAt, ctx.timezone)}
+              </span>
+            ) : mode === "portal" ? (
+              "To be confirmed"
+            ) : (
+              "Not set"
+            )
+          }
+        />
         <Detail
           label="Category"
           value={
@@ -378,6 +413,7 @@ function Detail({
   label: string;
   value: React.ReactNode;
 }) {
+  if (value === null || value === undefined || value === false) return null;
   return (
     <div className="flex items-start justify-between gap-3">
       <span className="shrink-0 text-muted-foreground">{label}</span>

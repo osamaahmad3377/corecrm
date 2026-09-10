@@ -685,9 +685,16 @@ advanced reports, billing.
   contact / ticket / conversation / attachment / email thread and removes
   client users that belonged only to that org. "Disable" is still the softer
   option.
-- **Ticket deadlines** — `Ticket.dueAt`, a manual date/time distinct from SLA,
-  editable by any staff member (`ticket.setDueDate`), shown on the ticket and
-  fed into the employee "overdue / due today" stats.
+- **Ticket deadlines** — two fields:
+  - `requestedDueAt` — the client's "needed by" date, set at ticket creation and
+    editable by the client on their open ticket (non-binding request).
+  - `dueAt` — the committed deadline. **Only Admin / Support Manager** may set or
+    change it (`ticket.setDueDate`); Support Agents see it read-only.
+  Overdue `dueAt` drives the employee "overdue / due today" stats and shows red.
+- **Employee portal shows closed work too** — `/employee` has a "Closed &
+  resolved" stat + tab; `/employee/tasks` tabs are My open work · Assigned to me
+  · Team queue · Closed & resolved. The default list is still the open queue.
+  `myScopeWhere` = assigned to me OR to any of my teams (whole group queue).
 - **Email triage** — inbox actions per unlinked inbound email:
   **Create ticket** · **Mark as info** · **Ignore** (+ undo), with filter tabs
   (Active / Needs triage / Info / Ignored / All). Counts feed the dashboard

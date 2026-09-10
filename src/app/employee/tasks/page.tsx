@@ -28,21 +28,34 @@ export default async function EmployeeTasksPage({
     myTeamIds(ctx),
   ]);
 
-  const scope = sp.assignedAgentId ?? "all";
-  const tabs: { key: string; label: string; param?: string }[] = [
-    { key: "all", label: "All my tickets" },
-    { key: "me", label: "Assigned to me", param: "me" },
+  const activeTab =
+    sp.view === "closed"
+      ? "closed"
+      : sp.assignedAgentId === "me"
+        ? "me"
+        : sp.assignedAgentId === "unassigned"
+          ? "unassigned"
+          : "all";
+
+  const tabs: { key: string; label: string; qs: Record<string, string> }[] = [
+    { key: "all", label: "My open work", qs: {} },
+    { key: "me", label: "Assigned to me", qs: { assignedAgentId: "me" } },
   ];
   if (teamIds.length) {
-    tabs.push({ key: "unassigned", label: "Team queue", param: "unassigned" });
+    tabs.push({
+      key: "unassigned",
+      label: "Team queue",
+      qs: { assignedAgentId: "unassigned" },
+    });
   }
+  tabs.push({ key: "closed", label: "Closed & resolved", qs: { view: "closed" } });
 
   return (
     <>
       <PageHeader
         title="My tasks"
         description={`${result.total} ticket${result.total === 1 ? "" : "s"}${
-          teamIds.length ? " assigned to you or your team" : " assigned to you"
+          teamIds.length ? " for you or your team" : " assigned to you"
         }`}
       />
 
@@ -50,14 +63,14 @@ export default async function EmployeeTasksPage({
         {tabs.map((t) => {
           const params = new URLSearchParams();
           if (sp.q) params.set("q", sp.q);
-          if (t.param) params.set("assignedAgentId", t.param);
+          for (const [k, v] of Object.entries(t.qs)) params.set(k, v);
           return (
             <Link
               key={t.key}
               href={`/employee/tasks${params.toString() ? `?${params}` : ""}`}
               className={cn(
                 "rounded-md px-3 py-1.5 text-sm font-medium",
-                scope === t.key
+                activeTab === t.key
                   ? "bg-accent text-accent-foreground"
                   : "text-muted-foreground hover:bg-accent/50",
               )}

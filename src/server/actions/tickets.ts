@@ -41,6 +41,8 @@ export async function createPortalTicketAction(
     preferredContactMethod: formData.get("preferredContactMethod") || "",
     impact: formData.get("impact") || "",
     urgency: formData.get("urgency") || "",
+
+    requestedDueAt: formData.get("requestedDueAt") || "",
     attachments: JSON.parse((formData.get("attachments") as string) || "[]"),
   });
   if (!parsed.success) {
@@ -82,6 +84,7 @@ export async function createInternalTicketAction(
     preferredContactMethod: formData.get("preferredContactMethod") || "",
     impact: formData.get("impact") || "",
     urgency: formData.get("urgency") || "",
+    requestedDueAt: formData.get("requestedDueAt") || "",
     assignedAgentId: formData.get("assignedAgentId") || "",
     assignedTeamId: formData.get("assignedTeamId") || "",
     attachments: JSON.parse((formData.get("attachments") as string) || "[]"),
@@ -202,8 +205,29 @@ export async function setTicketDueDateAction(
       revalidate: [
         `/admin/tickets/${ticketId}`,
         `/employee/tasks/${ticketId}`,
+        `/portal/tickets/${ticketId}`,
         "/admin/tickets",
         "/employee/tasks",
+      ],
+    };
+  });
+}
+
+/** Client (or staff on their behalf) proposes a "needed by" date. Non-binding. */
+export async function setRequestedDueDateAction(
+  ticketId: string,
+  iso: string | null,
+): Promise<ActionState> {
+  const ctx = await requireAuth();
+  return runAction(async () => {
+    const { setRequestedDueDate } = await import("@/server/services/ticket");
+    const meta = await requestMeta();
+    await setRequestedDueDate(ctx, ticketId, iso, meta);
+    return {
+      revalidate: [
+        `/portal/tickets/${ticketId}`,
+        `/admin/tickets/${ticketId}`,
+        `/employee/tasks/${ticketId}`,
       ],
     };
   });

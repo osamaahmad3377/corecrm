@@ -127,7 +127,7 @@ const INTERNAL_MATRIX: Record<InternalRole, Permission[]> = {
     "ticket.create",
     "ticket.changeStatus",
     "ticket.changePriority",
-    "ticket.setDueDate",
+    // NOTE: deadlines (ticket.setDueDate) are Admin / Support Manager only.
     "ticket.internalNote",
     "ticket.viewInternal",
     "ticket.publicReply",

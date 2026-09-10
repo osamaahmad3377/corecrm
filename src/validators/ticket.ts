@@ -26,6 +26,8 @@ export const createTicketSchema = z.object({
     .or(z.literal("")),
   impact: z.enum(["LOW", "MEDIUM", "HIGH"]).optional().or(z.literal("")),
   urgency: z.enum(["LOW", "MEDIUM", "HIGH"]).optional().or(z.literal("")),
+  /** Client's "needed by" date — a request, not a commitment. */
+  requestedDueAt: z.string().optional().or(z.literal("")),
   attachments: z.array(ticketAttachmentRefSchema).max(10).default([]),
 });
 
@@ -69,14 +71,19 @@ export const changePrioritySchema = z.object({
   priorityKey: z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]),
 });
 
+export const dueDateSchema = z.object({
+  /** ISO string, or null / "" to clear. */
+  dueAt: z.string().nullable().optional(),
+});
+
 export const ticketListFilterSchema = z.object({
   q: z.string().trim().max(200).optional(),
-  status: z.string().optional(), // status key or "OPEN_ALL"
+  status: z.string().optional(), // status key, "OPEN_ALL" or "CLOSED_ALL"
   priority: z.string().optional(),
   organizationId: z.string().uuid().optional(),
   assignedAgentId: z.string().optional(), // uuid or "me" or "unassigned"
   view: z
-    .enum(["all", "my", "unassigned", "critical", "sla-breached"])
+    .enum(["all", "my", "unassigned", "critical", "sla-breached", "closed"])
     .optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().default(25),

@@ -69,6 +69,8 @@ Client (per-org, `OrganizationUser.role`): `CLIENT_ADMIN`, `CLIENT_USER`.
 | View all tickets | ✅ | ✅ | ✅ | ✅ | — | — |
 | Assign / reassign | ✅ | ✅ | ✅ | — | — | — |
 | Change status / priority | ✅ | ✅ | ✅ | ✅ | reopen only | — |
+| Set / change ticket deadline (`dueAt`) | ✅ | ✅ | ✅ | — | — | — |
+| Propose "needed by" date (`requestedDueAt`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Public reply | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Internal notes (add + see) | ✅ | ✅ | ✅ | ✅ | — | — |
 | Connect / disconnect mailboxes | ✅ | ✅ | — | — | — | — |
