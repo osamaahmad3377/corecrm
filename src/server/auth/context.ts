@@ -1,19 +1,38 @@
 import "server-only";
 import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import type { InternalRole } from "@prisma/client";
 import { auth } from "./index";
 import { AuthContext, can, hasInternalRank, Permission } from "./rbac";
 import { AppError, forbidden, unauthorized } from "@/lib/errors";
 import { readImpersonation } from "./impersonation";
+import { prisma } from "@/server/db/client";
 
 /**
  * Resolve the acting user from the session. Organization access is derived here
  * from the authenticated session — never from request input.
+ *
+ * Returns null when nobody is signed in. A session naming a user that no longer
+ * exists is a different case and never reaches callers: sessions are
+ * self-contained JWTs, so a token can outlive its row — typically after a local
+ * `prisma migrate reset`, which recreates every user. Such a token satisfies
+ * every read and only surfaces on the first write with a foreign key to the
+ * user, as an opaque 500. Reporting it as "signed out" instead would trap the
+ * browser in a loop, because middleware sees the still-present cookie and sends
+ * it right back. So clear it: cookies cannot be written from a Server
+ * Component, hence the bounce through a route handler.
  */
 export async function getAuthContext(): Promise<AuthContext | null> {
   const session = await auth();
   if (!session?.user?.id) return null;
   const u = session.user;
+
+  const live = await prisma.user.findUnique({
+    where: { id: u.id },
+    select: { status: true },
+  });
+  if (!live || live.status === "DISABLED") redirect("/api/session-expired");
+
   return {
     userId: u.id,
     email: u.email,

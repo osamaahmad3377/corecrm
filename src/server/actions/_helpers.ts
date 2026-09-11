@@ -1,5 +1,6 @@
 import "server-only";
 import { revalidatePath } from "next/cache";
+import { unstable_rethrow } from "next/navigation";
 import { AppError, toAppError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { requestMeta } from "@/server/auth/context";
@@ -21,6 +22,9 @@ export async function runAction<T>(
     res.revalidate?.forEach((p) => revalidatePath(p));
     return { ok: true, data: res.data, message: res.message };
   } catch (e) {
+    // redirect()/notFound() signal control flow by throwing; swallowing them
+    // here would turn a session-expired bounce into a generic failure toast.
+    unstable_rethrow(e);
     const err = e instanceof AppError ? e : toAppError(e);
     if (err.code === "INTERNAL") {
       logger.error("action.failed", { error: e });
