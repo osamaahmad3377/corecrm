@@ -431,9 +431,13 @@ async function scheduleJob(args: ScheduleArgs): Promise<boolean> {
     args.bucket ?? "",
   ].join("|");
 
-  try {
-    await prisma.automationJob.create({
-      data: {
+  // A duplicate dedupeKey just means this email is already scheduled or sent,
+  // which is the normal outcome every time a sweep re-examines the same entity.
+  // `skipDuplicates` expresses that without Prisma logging a unique-violation
+  // as an error on a routine path.
+  const { count } = await prisma.automationJob.createMany({
+    data: [
+      {
         ruleId: args.rule.id,
         trigger: args.rule.trigger,
         entityType: args.entityType,
@@ -446,20 +450,10 @@ async function scheduleJob(args: ScheduleArgs): Promise<boolean> {
           new Date(Date.now() + args.rule.delayMinutes * 60_000),
         dedupeKey,
       },
-    });
-    return true;
-  } catch (e) {
-    // Unique violation on dedupeKey → already scheduled/sent. Not an error.
-    if (
-      typeof e === "object" &&
-      e &&
-      "code" in e &&
-      (e as { code?: string }).code === "P2002"
-    ) {
-      return false;
-    }
-    throw e;
-  }
+    ],
+    skipDuplicates: true,
+  });
+  return count > 0;
 }
 
 // ---------------------------------------------------------------------------
