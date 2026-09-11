@@ -74,7 +74,7 @@ reach XYZ Construction's tickets, contacts, assets, or emails.
 | Validation | Zod (shared schemas, client + server) |
 | Forms | React Hook Form + Zod resolver |
 | Email APIs | `EmailProvider` abstraction → Microsoft Graph, Gmail API |
-| Transactional email | React Email templates + provider send |
+| Transactional email | DB-backed templates (`{{var}}` + shared layout) → Resend, or logged in dev |
 | File storage | Vercel Blob (behind a `StorageProvider` interface) |
 | Charts | Recharts |
 | Background work | Vercel Cron + provider webhooks (**no long-running workers**) |
@@ -587,11 +587,27 @@ Channel interface → `InAppChannel` (writes `Notification`) + `EmailChannel`
 no rewrite. Recipient resolution respects organization scope and role (clients
 only get their own tickets).
 
-## 14. Email templates (React Email)
+## 14. Email templates
 
-Client Invitation · Ticket Created · Ticket Assigned · Agent Reply · Client
-Reply · Ticket Resolved · Password Reset · Email Account Connection Failure.
-Shared layout (logo, footer, button).
+Templates live in the database (`EmailTemplate`) so admins can edit them without
+a deploy. `src/server/email-templates/registry.ts` holds the built-in defaults
+(`isSystem`, seeded on first run); `renderTemplate(key, vars)` prefers the DB row
+and falls back to the registry, substitutes `{{var}}` tokens, and wraps the body
+in a shared layout (heading, optional CTA button, footer). Plain-text is derived
+from the HTML, so every template ships both parts.
+
+**16 built-ins.** Transactional: Invitation · Ticket Created (client) · Ticket
+Created (internal) · Ticket Assigned · Ticket Reply · Ticket Resolved · Password
+Reset · Email Account Failure. Automation (see §18a): Client Onboarding Welcome ·
+Invitation Reminder · Portal Account Activated · Resolution Follow-up ·
+Waiting-on-Client Reminder · Stale Ticket Check-in · Weekly Client Digest ·
+Re-engagement.
+
+Admins edit, reset-to-default, or create templates under **Settings → Templates**
+(`emailTemplate.manage`); custom templates can be bound to any automation rule.
+
+> `@react-email/components` is still in `package.json` but nothing imports it —
+> the rendering path above replaced it. Safe to remove.
 
 ---
 
@@ -608,18 +624,46 @@ Shared layout (logo, footer, button).
   agent sees it → agent replies → client sees reply → agent resolves → client
   sees resolution. Plus invite acceptance and ⌘K search.
 
+**Running the suites.** Integration tests share one database and are therefore
+serial (`fileParallelism: false`); `server-only` is aliased to a stub and PostCSS
+is disabled for the test build.
+
+**Playwright does not run on this machine** — v1.63 refuses to install browsers
+on macOS 13 ("does not support chromium on mac13"). Until that is resolved,
+verify browser-facing behaviour over HTTP with `curl` plus the Vitest
+integration harness. Server actions invoked imperatively (plain arguments) can
+be POSTed with a `Next-Action: <id>` header and a JSON array body, taking the id
+from `.next/server/server-reference-manifest.json`. Form actions wired through
+`useActionState` take a two-argument `(prevState, formData)` envelope that curl
+cannot reproduce — test those at the service layer instead.
+
 ---
 
 ## 16. Seed data (`prisma/seed.ts`)
 
 - Statuses, priorities, default categories/subcategories, default global
   `SlaPolicy` + targets, tags.
-- Org: **ABC Manufacturing Pty Ltd** + contacts (John Smith, Sarah Jones,
-  David Brown) + sample assets.
-- Users: Super Admin, Support Manager, Support Agent, Client Admin (John),
-  Client User (Sarah) — dev passwords, clearly marked dev-only.
-- ~6–10 sample tickets across statuses/priorities with conversations + activity.
+- 16 system `EmailTemplate` rows and the 8 default `AutomationRule`s bound to
+  them (§18a).
+- Orgs: **ABC Manufacturing Pty Ltd** (full onboarding fields — business hours,
+  location, SharePoint, website, onboarding date) + contacts (John Smith, Sarah
+  Jones, David Brown) + sample assets, and **XYZ Construction Group**, which
+  exists to prove organization isolation.
+- Users: Super Admin, Admin, Support Manager, two Support Agents (Riley Agent,
+  Jordan Tech, both in the *Service Desk* team), Client Admin (John), Client
+  User (Sarah) — dev passwords, clearly marked dev-only.
+- 6 sample tickets across statuses/priorities with conversations + activity;
+  higher-priority ones carry `requestedDueAt` / `dueAt` so deadline badges and
+  alerts have something to show.
 - **No fake OAuth credentials / email accounts.**
+
+**User ids are fixed, not random** (`00000000-0000-4000-a000-00000000000N` for
+staff, `…-b000-…` for client users). Sessions are self-contained JWTs that name a
+user id, so random ids would silently invalidate every open session on each
+`migrate reset` — see §22.
+
+Everything is upserted by a natural key, so re-running the seed is safe; only
+`db:reset` drops data.
 
 ---
 
@@ -630,6 +674,9 @@ dev · build · start · lint · typecheck
 test · test:watch · test:e2e
 db:migrate · db:migrate:deploy · db:seed · db:reset · db:studio
 ```
+
+`dev` is pinned to port 3000 and preceded by `predev` → `scripts/dev-guard.mjs`
+(§22).
 
 ---
 
@@ -699,7 +746,7 @@ advanced reports, billing.
   **Create ticket** · **Mark as info** · **Ignore** (+ undo), with filter tabs
   (Active / Needs triage / Info / Ignored / All). Counts feed the dashboard
   "how requests reached us" breakdown.
-- **DB-backed email templates** — `EmailTemplate` rows (8 built-ins seeded,
+- **DB-backed email templates** — `EmailTemplate` rows (16 built-ins seeded,
   `isSystem`), edited/reset/created under **Settings → Templates**
   (`emailTemplate.manage`). `renderTemplate(key, vars)` does `{{var}}`
   substitution + shared layout; falls back to the registry default.
@@ -768,3 +815,56 @@ typecheck, lint, tests, and the production build; fix failures. 13. Update
 
 **Priorities, in order:** Security → Organization data isolation → Reliability →
 Maintainability → Performance → UX → Scalability.
+
+---
+
+## 22. Local development invariants
+
+Two failure modes cost a great deal of debugging time because both disguise
+themselves as application bugs. Each now has a guard; the reasoning is recorded
+so neither is reintroduced.
+
+### One dev server, always
+
+Next silently falls back to the next free port, so a second `npm run dev` looks
+like it started fine — but both processes compile into the same `.next`
+directory and shred each other's webpack chunks. The symptoms point everywhere
+except the cause: `Cannot find module './vendor-chunks/*.js'`, stylesheets 404ing
+so pages render unstyled, dashboards showing no rows, and server actions failing
+with a generic 500. The same applies to `next dev` alongside `next build`.
+
+`predev` (`scripts/dev-guard.mjs`) kills any other dev server rooted in this
+project plus anything holding the port, and clears `.next` when it finds one;
+`dev` pins `--port 3000`. Running `npm run dev` twice is safe — the second takes
+over cleanly.
+
+Diagnose with `lsof -nP -iTCP:3000 -sTCP:LISTEN` and `pgrep -fl next-server`;
+expect exactly one. Restart the dev server after any `prisma migrate`, since a
+stale Prisma client breaks whole modules at import time.
+
+### Sessions can outlive the user row
+
+Sessions are self-contained JWTs naming a user id (JWT field `uid` — see
+`authConfig.callbacks`). `prisma migrate reset` recreates every user, so the
+browser's token can name a row that no longer exists. Such a token satisfies
+every read and first fails on a write with a foreign key to the user
+(`TicketAssignment_assignedById_fkey`, `Invitation_invitedById_fkey`) as an
+opaque "Something went wrong on our side".
+
+Two obvious fixes are wrong. Treating the session as signed-out leaves the
+cookie in place, so middleware — which cannot reach the database from the edge —
+keeps treating the request as authenticated and bounces it back: an infinite loop
+between the app and `/login`. Layouts (`admin`, `employee`, `portal`, `app/page`)
+resolve auth before any page guard runs, so a page-level check never gets a turn.
+
+`getAuthContext` therefore confirms the row and redirects to
+`/api/session-expired`, a route handler (under `/api`, so the middleware matcher
+skips it) that clears the cookie and lands on `/login?expired=1` with an
+explanation. Server Components cannot write cookies, which is why the bounce
+needs a route handler. `runAction` calls `unstable_rethrow(e)` so the redirect is
+not swallowed into a generic failure toast. Fixed seed ids (§16) mean a reset no
+longer invalidates sessions in the first place.
+
+To reproduce: forge a token with `next-auth/jwt`'s `encode({ salt:
+"authjs.session-token", secret: AUTH_SECRET, token: { uid: "<missing-uuid>", … }
+})`. The script must sit inside the project or Node cannot resolve `next-auth`.
