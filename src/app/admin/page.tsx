@@ -49,6 +49,8 @@ export default async function AdminDashboard() {
   const cb = platform.channelBreakdown;
 
   const recentTickets = recent.items.slice(0, 8);
+  const hasDeadlines =
+    deadlines.overdue.length > 0 || deadlines.dueSoon.length > 0;
 
   return (
     <>
@@ -64,47 +66,62 @@ export default async function AdminDashboard() {
         }
       />
 
-      <DeadlineAlerts
-        overdue={deadlines.overdue}
-        dueSoon={deadlines.dueSoon}
-        basePath="/admin/tickets"
-        timezone={ctx.timezone}
-      />
-
-      <div className="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <StatCard
-          label="Clients"
-          value={platform.clients}
-          hint={`${platform.activeClients} active`}
-          icon={Building2}
-          href="/admin/organizations"
+      {/* Deadlines beside the recent queue. With nothing to flag, the deadline
+          card renders nothing, so recent tickets takes the full width. */}
+      <div
+        className={`mb-4 grid gap-4 ${hasDeadlines ? "lg:grid-cols-2" : ""}`}
+      >
+        <DeadlineAlerts
+          overdue={deadlines.overdue}
+          dueSoon={deadlines.dueSoon}
+          basePath="/admin/tickets"
+          timezone={ctx.timezone}
+          className=""
         />
-        <StatCard
-          label="Employees"
-          value={platform.employees}
-          hint={`${platform.activeEmployees} active`}
-          icon={Users}
-          href="/admin/team"
-        />
-        <StatCard
-          label="Groups"
-          value={platform.groups}
-          hint={`${platform.activeGroups} active`}
-          icon={Users}
-          href="/admin/team"
-        />
-        <StatCard
-          label="Active tickets"
-          value={platform.activeTickets}
-          icon={Inbox}
-          href="/admin/tickets?status=OPEN_ALL"
-        />
-        <StatCard
-          label="Closed tickets"
-          value={platform.closedTickets}
-          icon={CheckCircle2}
-          href="/admin/tickets?status=CLOSED"
-        />
+        <Card>
+          <CardHeader className="flex-row items-center justify-between">
+            <CardTitle className="text-sm">Recent tickets</CardTitle>
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/admin/tickets">View all</Link>
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {recentTickets.length === 0 ? (
+              <EmptyState title="No tickets yet" />
+            ) : (
+              <ul className="divide-y">
+                {recentTickets.map((t) => (
+                  <li key={t.id}>
+                    <Link
+                      href={`/admin/tickets/${t.id}`}
+                      className="flex items-center gap-3 py-2.5 hover:bg-accent/40"
+                    >
+                      <span className="font-mono text-xs text-muted-foreground">
+                        {t.ticketNumber}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-sm">
+                        {t.subject}
+                      </span>
+                      <span className="hidden sm:block">
+                        <PriorityBadge
+                          priorityKey={t.priority.key}
+                          label={t.priority.label}
+                        />
+                      </span>
+                      <StatusBadge
+                        statusKey={t.status.key}
+                        label={t.status.label}
+                      />
+                      <span className="hidden w-24 shrink-0 text-right text-xs text-muted-foreground xl:block">
+                        {formatRelative(t.createdAt)}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -176,60 +193,14 @@ export default async function AdminDashboard() {
         </Card>
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader className="flex-row items-center justify-between">
-            <CardTitle className="text-sm">Recent tickets</CardTitle>
-            <Button asChild variant="ghost" size="sm">
-              <Link href="/admin/tickets">View all</Link>
-            </Button>
-          </CardHeader>
-          <CardContent>
-            {recentTickets.length === 0 ? (
-              <EmptyState title="No tickets yet" />
-            ) : (
-              <ul className="divide-y">
-                {recentTickets.map((t) => (
-                  <li key={t.id}>
-                    <Link
-                      href={`/admin/tickets/${t.id}`}
-                      className="flex items-center gap-3 py-2.5 hover:bg-accent/40"
-                    >
-                      <span className="font-mono text-xs text-muted-foreground">
-                        {t.ticketNumber}
-                      </span>
-                      <span className="min-w-0 flex-1 truncate text-sm">
-                        {t.subject}
-                      </span>
-                      <span className="hidden sm:block">
-                        <PriorityBadge
-                          priorityKey={t.priority.key}
-                          label={t.priority.label}
-                        />
-                      </span>
-                      <StatusBadge
-                        statusKey={t.status.key}
-                        label={t.status.label}
-                      />
-                      <span className="hidden w-24 shrink-0 text-right text-xs text-muted-foreground md:block">
-                        {formatRelative(t.createdAt)}
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Tickets over time (14d)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <TrendChart data={charts.overTime} />
-          </CardContent>
-        </Card>
-      </div>
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle className="text-sm">Tickets over time (14d)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <TrendChart data={charts.overTime} />
+        </CardContent>
+      </Card>
 
       <Card className="mt-4">
         <CardHeader>
@@ -273,6 +244,44 @@ export default async function AdminDashboard() {
           </p>
         </CardContent>
       </Card>
+
+      {/* Account totals — reference figures rather than daily working numbers,
+          so they sit below the operational queues. */}
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <StatCard
+          label="Clients"
+          value={platform.clients}
+          hint={`${platform.activeClients} active`}
+          icon={Building2}
+          href="/admin/organizations"
+        />
+        <StatCard
+          label="Employees"
+          value={platform.employees}
+          hint={`${platform.activeEmployees} active`}
+          icon={Users}
+          href="/admin/team"
+        />
+        <StatCard
+          label="Groups"
+          value={platform.groups}
+          hint={`${platform.activeGroups} active`}
+          icon={Users}
+          href="/admin/team"
+        />
+        <StatCard
+          label="Active tickets"
+          value={platform.activeTickets}
+          icon={Inbox}
+          href="/admin/tickets?status=OPEN_ALL"
+        />
+        <StatCard
+          label="Closed tickets"
+          value={platform.closedTickets}
+          icon={CheckCircle2}
+          href="/admin/tickets?status=CLOSED"
+        />
+      </div>
     </>
   );
 }

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PriorityBadge, UserAvatar } from "@/components/badges";
 import { DeadlineBadge } from "./deadline-badge";
+import { cn } from "@/lib/utils";
 import { AlarmClock, AlertTriangle } from "lucide-react";
 
 interface Row {
@@ -24,22 +25,26 @@ export function DeadlineAlerts({
   basePath,
   timezone = "UTC",
   showOrg = true,
+  className = "mb-6",
 }: {
   overdue: Row[];
   dueSoon: Row[];
   basePath: string;
   timezone?: string;
   showOrg?: boolean;
+  /** Outer spacing. Pass "" when the card is a grid item positioned by its parent. */
+  className?: string;
 }) {
   if (overdue.length === 0 && dueSoon.length === 0) return null;
 
   return (
     <Card
-      className={
+      className={cn(
+        className,
         overdue.length > 0
-          ? "mb-6 border-destructive/40 bg-destructive/5"
-          : "mb-6 border-warning/40 bg-warning/5"
-      }
+          ? "border-destructive/40 bg-destructive/5"
+          : "border-warning/40 bg-warning/5",
+      )}
     >
       <CardHeader className="flex-row items-center gap-2">
         {overdue.length > 0 ? (
